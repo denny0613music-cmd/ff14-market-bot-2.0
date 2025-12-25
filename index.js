@@ -49,24 +49,24 @@ http.createServer((req, res) => {
 // 註冊 Slash Command
 client.on('ready', async () => {
   const data = new SlashCommandBuilder()
-    .setName('市價')
+    .setName('price')
     .setDescription('查詢物品市場價格')
     .addStringOption(option =>
-      option.setName('物品')
+      option.setName('item')
         .setDescription('輸入物品名稱')
         .setRequired(true)
     );
 
   await client.application.commands.create(data);
-  console.log('Slash command /市價 created!');
+  console.log('Slash command /price created!');
 });
 
 // 處理 Slash Command
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isCommand()) return;
 
-  if (interaction.commandName === '市價') {
-    const keyword = interaction.options.getString('物品');
+  if (interaction.commandName === 'price') {
+    const keyword = interaction.options.getString('item');
     
     if (!keyword) {
       return interaction.reply('請提供要查詢的物品名稱。');
