@@ -1,7 +1,6 @@
-import { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, SlashCommandBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, SlashCommandBuilder } from 'discord.js';
 import dotenv from 'dotenv';
 import fetch from 'node-fetch';  // 正確導入 node-fetch
-import http from 'http';  // 用於設定 HTTP 伺服器
 
 dotenv.config();
 
@@ -54,15 +53,6 @@ const itemLookup = {
   "魔法水": 1676,
 };
 
-// HTTP 伺服器設定
-const PORT = process.env.PORT || 10000;  // 使用 Render 提供的端口
-http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end('FF14 Market Bot is running');
-}).listen(PORT, () => {
-  console.log(`HTTP server listening on port ${PORT}`);
-});
-
 // 處理 Slash Command
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isCommand()) return;
@@ -80,31 +70,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     const price = await getMarketPrice(itemId);
-
-    // 建立按鈕選單
-    const buttonRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('check_price')
-        .setLabel('查詢價格')
-        .setStyle(ButtonStyle.Primary)
-    );
-
-    await interaction.reply({
-      content: `你查詢的物品是：${keyword}\n價格：${price}`,
-      components: [buttonRow],
-    });
-  }
-
-  // 處理按鈕互動
-  if (interaction.isButton()) {
-    if (interaction.customId === 'check_price') {
-      const itemId = '1675';  // 這是硬編碼的物品 ID，您可以根據需求更新為動態取得
-      const price = await getMarketPrice(itemId);
-      await interaction.update({
-        content: `物品的價格是：${price}`,
-        components: []  // 按鈕點擊後會移除
-      });
-    }
+    await interaction.reply(`你查詢的物品是：${keyword}\n價格：${price}`);
   }
 });
 
