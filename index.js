@@ -1,9 +1,11 @@
 import { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import dotenv from 'dotenv';
 import fetch from 'node-fetch';  // 正確導入 node-fetch
+import http from 'http';  // 用於設定 HTTP 伺服器
 
 dotenv.config();
 
+// 設定 Bot 的 intents
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -12,10 +14,12 @@ const client = new Client({
   ]
 });
 
-client.once('ready', () => {
+// 當 Bot 上線後顯示訊息
+client.once('clientReady', () => {  // 改為 clientReady
   console.log(`Logged in as ${client.user.tag}`);
 });
 
+// 市場價格查詢
 async function getMarketPrice(itemId) {
   const url = `https://universalis.app/api/v2/market/${itemId}`;
   const res = await fetch(url);
@@ -33,6 +37,16 @@ const itemLookup = {
   "魔法水": 1676,
 };
 
+// HTTP 伺服器設定
+const PORT = process.env.PORT || 10000;  // 使用 Render 提供的端口
+http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end('FF14 Market Bot is running');
+}).listen(PORT, () => {
+  console.log(`HTTP server listening on port ${PORT}`);
+});
+
+// 設定指令，當收到訊息時回應
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
 
@@ -63,4 +77,5 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
+// 登入 Bot
 client.login(process.env.BOT_TOKEN);
