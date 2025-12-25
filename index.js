@@ -15,8 +15,25 @@ const client = new Client({
 });
 
 // 當 Bot 上線後顯示訊息
-client.once('clientReady', () => {
+client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}`);
+  
+  // 註冊 Slash Command
+  try {
+    await client.application.commands.create(
+      new SlashCommandBuilder()
+        .setName('price')
+        .setDescription('查詢物品市場價格')
+        .addStringOption(option =>
+          option.setName('item')
+            .setDescription('輸入物品名稱')
+            .setRequired(true)
+        )
+    );
+    console.log('Slash command /price created!');
+  } catch (error) {
+    console.error('Error registering Slash command:', error);
+  }
 });
 
 // 市場價格查詢
@@ -44,21 +61,6 @@ http.createServer((req, res) => {
   res.end('FF14 Market Bot is running');
 }).listen(PORT, () => {
   console.log(`HTTP server listening on port ${PORT}`);
-});
-
-// 註冊 Slash Command
-client.on('ready', async () => {
-  const data = new SlashCommandBuilder()
-    .setName('price')
-    .setDescription('查詢物品市場價格')
-    .addStringOption(option =>
-      option.setName('item')
-        .setDescription('輸入物品名稱')
-        .setRequired(true)
-    );
-
-  await client.application.commands.create(data);
-  console.log('Slash command /price created!');
 });
 
 // 處理 Slash Command
