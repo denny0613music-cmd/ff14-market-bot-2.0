@@ -10,7 +10,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module",  // 新增這一行
+  "type": "module",  // 保持這行，以便支援 ES 模組
   "dependencies": {
     "discord.js": "^14.25.1",
     "dotenv": "^17.2.3"
