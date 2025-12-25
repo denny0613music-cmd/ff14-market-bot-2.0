@@ -2,7 +2,7 @@ import fs from "fs";
 import fetch from "node-fetch";
 import pLimit from "p-limit";
 
-const limit = pLimit(6);
+const limit = pLimit(4);  // 減少並行請求數量
 const BATCH_SIZE = 300;
 const OUT_FILE = "./items_zh_tw.json";
 const CHECKPOINT_FILE = "./items_zh_tw.checkpoint.json";
@@ -22,6 +22,7 @@ async function fetchJson(url, retry = 6) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } catch (e) {
+      console.error(`Error fetching data for ${url}:`, e);  // 顯示錯誤訊息
       await sleep(800 * (i + 1));
     } finally {
       clearTimeout(timer);
