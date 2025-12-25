@@ -1,65 +1,71 @@
-require('dotenv').config();
-const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder } = require('discord.js');
-const fetch = require('node-fetch');
+import { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import dotenv from 'dotenv';
+import fetch from 'node-fetch';
 
-// 初始化 Discord Bot，啟用必要的 intents
+dotenv.config();
+
+// 創建 Discord 客戶端，開啟需要的 intents
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds,            // 伺服器信息
-    GatewayIntentBits.MessageContent,    // 讀取訊息內容
-    GatewayIntentBits.GuildMembers,      // 監控成員變動
+    GatewayIntentBits.Guilds, // 用於訪問伺服器資訊
+    GatewayIntentBits.GuildMessages, // 用於讀取訊息
+    GatewayIntentBits.MessageContent, // 用於讀取訊息內容
   ]
 });
 
-// 當 Bot 啟動後
+// 當 bot 上線時的訊息
 client.once('ready', () => {
-  console.log('Bot is online!');
+  console.log(`Logged in as ${client.user.tag}`);
 });
 
-// 當 Bot 收到訊息時觸發
+// 市價查詢 API，從 Universalis 取得單一物品的市場資料
+async function getMarketPrice(itemId) {
+  const url = `https://universalis.app/api/v2/market/${itemId}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  
+  // 假設我們要顯示的是物品的目前價格
+  if (data && data.price) {
+    return `Price: ${data.price}`;
+  } else {
+    return 'Market price not found.';
+  }
+}
+
+// 設定命令，當收到訊息時回應
 client.on('messageCreate', async (message) => {
-  if (message.content.startsWith('!查詢')) {
-    // 擷取查詢字詞
-    const query = message.content.slice(3).trim().toLowerCase();
+  // 忽略機器人發出的訊息
+  if (message.author.bot) return;
 
-    // 模擬物品對照資料（實際情況應從檔案讀取）
-    const itemMapping = [
-      { id: '1', name: '火之石' },
-      { id: '2', name: '水之石' },
-    ];
+  // 如果訊息是 "!market"
+  if (message.content.toLowerCase() === '!market') {
+    // 創建按鈕
+    const button = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('check_price')
+        .setLabel('Check Market Price')
+        .setStyle(ButtonStyle.Primary)
+    );
 
-    const matchingItems = itemMapping.filter(item => item.name.includes(query));
-
-    if (matchingItems.length === 0) {
-      message.channel.send('沒有找到相關物品');
-    } else {
-      // 創建按鈕
-      const row = new ActionRowBuilder();
-      matchingItems.forEach(item => {
-        row.addComponents(
-          new ButtonBuilder()
-            .setLabel(item.name)
-            .setCustomId(`item_${item.id}`)
-            .setStyle('PRIMARY')
-        );
-      });
-
-      // 發送訊息並顯示按鈕
-      message.channel.send({ content: '請選擇一個物品:', components: [row] });
-    }
+    // 發送按鈕
+    await message.reply({
+      content: 'Click the button below to check the market price.',
+      components: [button],
+    });
   }
 });
 
-// 當用戶點擊按鈕時觸發
+// 處理按鈕互動
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isButton()) return;
 
-  const [_, itemId] = interaction.customId.split('_');
-  const item = { id: itemId, name: '火之石' }; // 簡單模擬，實際情況應從資料庫或檔案中查詢
-
-  // 這裡可以換成您從 Universalis 抓取的資料
-  interaction.reply(`物品: ${item.name}\n價格: 1000 金幣`);
+  if (interaction.customId === 'check_price') {
+    // 假設你要查詢的物品 ID 是 1675（這是「鐵礦」的 ID）
+    const itemId = '1675'; // 你可以根據需要替換成其他物品的 ID
+    const price = await getMarketPrice(itemId);
+    await interaction.reply(`Fetching the market price for item ${itemId}...\n${price}`);
+  }
 });
 
-// 登入 Bot
+// 登入 bot
 client.login(process.env.BOT_TOKEN);
