@@ -220,29 +220,57 @@ client.on("messageCreate", async (msg) => {
   }
 
   const worlds = getWorlds();
-  const prices = [];
+
+  // 每個世界都查一次最低單價，並保留查不到/錯誤的狀態
+  const perWorld = [];
 
   for (const w of worlds) {
     try {
       const data = await fetchJson(
-        `https://universalis.app/api/v2/${w}/${item.id}?listings=20&entries=0`
+        `https://universalis.app/api/v2/${encodeURIComponent(w)}/${item.id}?listings=50&entries=0`
       );
-      const min = Math.min(...data.listings.map((l) => l.pricePerUnit));
-      if (Number.isFinite(min)) prices.push({ w, min });
+
+      const listings = Array.isArray(data?.listings) ? data.listings : [];
+      const mins = listings
+        .map((l) => Number(l?.pricePerUnit))
+        .filter((n) => Number.isFinite(n) && n > 0);
+
+      const min = mins.length ? Math.min(...mins) : null;
+      perWorld.push({ w, min });
     } catch (e) {
       debug("market fail:", w, e.message);
+      perWorld.push({ w, min: null });
     }
   }
 
-  if (!prices.length) return msg.reply("⚠️ 查不到任何價格資料");
+  const valid = perWorld.filter((x) => Number.isFinite(x.min));
+  if (!valid.length) return msg.reply("⚠️ 查不到任何價格資料");
 
-  prices.sort((a, b) => a.min - b.min);
-  const best = prices[0];
+  valid.sort((a, b) => a.min - b.min);
+  const best = valid[0];
+
+  // 顯示時：有價格的排前面，沒有的放最後
+  const displayRows = [...perWorld].sort((a, b) => {
+    const av = Number.isFinite(a.min) ? a.min : Infinity;
+    const bv = Number.isFinite(b.min) ? b.min : Infinity;
+    return av - bv;
+  });
 
   const embed = new EmbedBuilder()
     .setTitle(`📦 ${item.name}`)
-    .setDescription(`🥇 **${displayWorldName(best.w)}**：**${best.min.toLocaleString()}** gil`)
-    ; // footer 不能是空字串，避免 Discord.js 驗證錯誤
+    .setDescription(
+      `🥇 **最低價**：**${displayWorldName(best.w)}** ・ **${best.min.toLocaleString()}** gil
+` +
+        `（下方列出你設定的所有伺服器最低單價）`
+    );
+
+  // Discord Embed 最多 25 個欄位；你的 WORLD_LIST 目前只有 8 個很安全
+  for (const row of displayRows) {
+    const name = displayWorldName(row.w);
+    const value = Number.isFinite(row.min) ? `**${row.min.toLocaleString()}** gil` : "—";
+    embed.addFields({ name, value, inline: true });
+  }
+
   if (DEBUG_MODE) embed.setFooter({ text: "🪲 Debug Mode ON" });
 
   await msg.reply({ embeds: [embed] });
