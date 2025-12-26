@@ -145,11 +145,18 @@ async function resolveViaCafeMaker(queryTw) {
 
   const url = `${XIVAPI_BASE}/search?string=${encodeURIComponent(
     queryChs
-  )}&indexes=item&language=chs&limit=1`;
+  )}&indexes=item&language=chs&limit=5`;
 
   const data = await fetchJson(url);
-  const r = data?.Results?.[0];
-  if (!r) return null;
+  const results = Array.isArray(data?.Results) ? data.Results : [];
+  if (!results.length) return null;
+
+  // 盡量挑最像的（完全比對優先，其次包含）
+  const exact = results.find(x => String(x.Name || "") === queryChs);
+  const contains = results.find(x => String(x.Name || "").includes(queryChs));
+  const r = exact || contains || results[0];
+  debug("cafemaker candidates:", results.slice(0, 5).map(x => ({ ID: x.ID, Name: x.Name })));
+  debug("cafemaker picked:", { ID: r.ID, Name: r.Name });
 
   const id = Number(r.ID);
   const nameTw = s2t(r.Name);
@@ -197,12 +204,17 @@ client.on("messageCreate", async (msg) => {
   if (!query) return;
 
   debug("user input:", text, "→ query:", query);
+  const queryChsForDebug = t2s(query);
+  debug("query chs (for CafeMaker):", queryChsForDebug);
 
   const item = await resolveItem(query);
   if (!item) {
     return msg.reply(
       DEBUG_MODE
-        ? `❌ 找不到物品\n原始輸入：${text}\n解析後：${query}`
+        ? `❌ 找不到物品
+原始輸入：${text}
+解析後：${query}
+轉簡中：${queryChsForDebug}`
         : `❌ 找不到物品：「${query}」`
     );
   }
@@ -230,7 +242,8 @@ client.on("messageCreate", async (msg) => {
   const embed = new EmbedBuilder()
     .setTitle(`📦 ${item.name}`)
     .setDescription(`🥇 **${displayWorldName(best.w)}**：**${best.min.toLocaleString()}** gil`)
-    .setFooter({ text: DEBUG_MODE ? "🪲 Debug Mode ON" : "" });
+    ; // footer 不能是空字串，避免 Discord.js 驗證錯誤
+  if (DEBUG_MODE) embed.setFooter({ text: "🪲 Debug Mode ON" });
 
   await msg.reply({ embeds: [embed] });
 });
