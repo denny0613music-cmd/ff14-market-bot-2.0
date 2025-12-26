@@ -1,6 +1,7 @@
 import "dotenv/config";
 import http from "http";
 import fs from "fs";
+import path from "path";
 import fetch from "node-fetch";
 import { createRequire } from "module";
 import {
@@ -46,7 +47,9 @@ const AUTO_DELETE_MINUTES = Number(process.env.AUTO_DELETE_MINUTES || 30);
 const AUTO_DELETE_MS = Math.max(0, AUTO_DELETE_MINUTES) * 60 * 1000;
 
 const ITEMS_FILE = "./items_zh_tw.json";
-const MANUAL_FILE = "./items_zh_manual.json";
+const MANUAL_FILE = (process.env.MANUAL_FILE && process.env.MANUAL_FILE.trim())
+  ? process.env.MANUAL_FILE.trim()
+  : (fs.existsSync("/data") ? "/data/items_zh_manual.json" : "./items_zh_manual.json");
 const XIVAPI_BASE = "https://cafemaker.wakingsands.com";
 
 /* ===============================
@@ -438,6 +441,7 @@ client.once("ready", () => {
   console.log(`🌍 WORLDS=${getWorlds().join(",")}`);
   console.log(`🧹 AUTO_DELETE_MINUTES=${AUTO_DELETE_MINUTES}`);
   console.log(`🪲 DEBUG_MODE=${DEBUG_MODE}`);
+console.log(`💾 MANUAL_FILE=${MANUAL_FILE}`);
 });
 
 client.on("messageCreate", async (msg) => {
