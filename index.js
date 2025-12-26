@@ -10,7 +10,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from "discord.js";
-import OpenCC from "opencc-js";
+import { Converter } from "opencc-js";
 
 /* ===============================
    基本設定
@@ -42,8 +42,8 @@ http
 /* ===============================
    OpenCC
 ================================ */
-const t2s = OpenCC.Converter({ from: "tw", to: "cn" });
-const s2t = OpenCC.Converter({ from: "cn", to: "tw" });
+const t2s = Converter({ from: "tw", to: "cn" });
+const s2t = Converter({ from: "cn", to: "tw" });
 
 /* ===============================
    資料檔（Render Disk）
@@ -111,7 +111,9 @@ client.once("ready", () => {
   console.log(`💾 MANUAL_FILE=${MANUAL_FILE}`);
 
   const manual = loadManual();
-  console.log(`📦 items loaded: base=0 manual=${Object.keys(manual).length} merged=${Object.keys(manual).length}`);
+  console.log(
+    `📦 items loaded: base=0 manual=${Object.keys(manual).length} merged=${Object.keys(manual).length}`
+  );
 });
 
 /* ===============================
@@ -143,7 +145,7 @@ client.on("messageCreate", async (msg) => {
       )}&indexes=item&limit=20`
     );
     data = await res.json();
-  } catch (e) {
+  } catch {
     await msg.reply("⚠️ 搜尋服務暫時不可用，請稍後再試。");
     return;
   }
@@ -231,9 +233,7 @@ async function sendPrice(msg, itemId, itemName) {
   for (const w of WORLD_LIST) {
     try {
       const r = await fetch(
-        `https://universalis.app/api/v2/${encodeURIComponent(
-          w
-        )}/${itemId}?listings=20`
+        `https://universalis.app/api/v2/${encodeURIComponent(w)}/${itemId}?listings=20`
       );
       const d = await r.json();
       const min = d.listings?.length
