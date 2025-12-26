@@ -18,19 +18,26 @@ import OpenCC from "opencc-js";
 const PORT = process.env.PORT || 10000;
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const PRICE_CHANNEL_ID = process.env.PRICE_CHANNEL_ID;
-const WORLD_LIST = (process.env.WORLD_LIST || "").split(",").map(v => v.trim()).filter(Boolean);
+
+const WORLD_LIST = (process.env.WORLD_LIST || "")
+  .split(",")
+  .map((v) => v.trim())
+  .filter(Boolean);
+
 const AUTO_DELETE_MINUTES = Number(process.env.AUTO_DELETE_MINUTES || 30);
 const DEBUG_MODE = String(process.env.DEBUG_MODE).toLowerCase() === "true";
 
 /* ===============================
    Render health check
 ================================ */
-http.createServer((_, res) => {
-  res.writeHead(200);
-  res.end("ok");
-}).listen(PORT, () => {
-  console.log(`HTTP server listening on ${PORT}`);
-});
+http
+  .createServer((_, res) => {
+    res.writeHead(200);
+    res.end("ok");
+  })
+  .listen(PORT, () => {
+    console.log(`HTTP server listening on ${PORT}`);
+  });
 
 /* ===============================
    OpenCC
@@ -56,7 +63,6 @@ function loadManual() {
     return {};
   }
 }
-
 function saveManual(data) {
   fs.writeFileSync(MANUAL_FILE, JSON.stringify(data, null, 2), "utf8");
 }
@@ -103,10 +109,13 @@ client.once("ready", () => {
   console.log(`🧹 AUTO_DELETE_MINUTES=${AUTO_DELETE_MINUTES}`);
   console.log(`🪲 DEBUG_MODE=${DEBUG_MODE}`);
   console.log(`💾 MANUAL_FILE=${MANUAL_FILE}`);
+
+  const manual = loadManual();
+  console.log(`📦 items loaded: base=0 manual=${Object.keys(manual).length} merged=${Object.keys(manual).length}`);
 });
 
 /* ===============================
-   查價主流程
+   主流程：文字查價（在指定頻道）
 ================================ */
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
@@ -118,80 +127,103 @@ client.on("messageCreate", async (msg) => {
   const manual = loadManual();
   const manualHit = manual[query];
 
-  let itemId = manualHit || null;
-  let itemName = query;
+  // 1) 如果已記住，直接查
+  if (manualHit) {
+    await sendPrice(msg, manualHit, query);
+    return;
+  }
 
-  /* ===== 手動已記住 ===== */
-  if (!itemId) {
-    const qCN = t2s(query);
-
+  // 2) 否則走 CafeMaker 搜尋候選
+  const qCN = t2s(query);
+  let data;
+  try {
     const res = await fetch(
       `https://cafemaker.wakingsands.com/search?string=${encodeURIComponent(
         qCN
       )}&indexes=item&limit=20`
     );
-    const data = await res.json();
-    const results = (data.Results || []).map(r => ({
-      id: r.ID,
-      name: s2t(r.Name),
-      score: similarity(query, s2t(r.Name)),
-    }));
-
-    if (!results.length) {
-      await msg.reply(`❌ 找不到物品：「${query}」`);
-      return;
-    }
-
-    results.sort((a, b) => b.score - a.score);
-    const top = results.slice(0, 5);
-
-    const row = new ActionRowBuilder();
-    top.forEach((r, i) => {
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`pick_${r.id}`)
-          .setLabel(`${i + 1}) ${r.name}`)
-          .setStyle(ButtonStyle.Primary)
-      );
-    });
-
-    const prompt = await msg.reply({
-      content: `❓ 找不到「${query}」\n請從下列候選選擇正確物品：`,
-      components: [row],
-    });
-
-    const collector = prompt.createMessageComponentCollector({
-      time: 60000,
-    });
-
-    collector.on("collect", async (i) => {
-      if (i.user.id !== msg.author.id) {
-        await i.reply({ content: "這不是給你的選項喔", ephemeral: true });
-        return;
-      }
-
-      const pickedId = Number(i.customId.replace("pick_", ""));
-      const picked = top.find(t => t.id === pickedId);
-      if (!picked) return;
-
-      manual[query] = pickedId;
-      saveManual(manual);
-
-      await i.update({ content: `📦 ${picked.name}`, components: [] });
-
-      itemId = pickedId;
-      itemName = picked.name;
-      await sendPrice(msg, itemId, itemName);
-    });
-
+    data = await res.json();
+  } catch (e) {
+    await msg.reply("⚠️ 搜尋服務暫時不可用，請稍後再試。");
     return;
   }
 
-  await sendPrice(msg, itemId, itemName);
+  const results = (data?.Results || []).map((r) => {
+    const nameTW = s2t(r.Name);
+    return {
+      id: Number(r.ID),
+      name: nameTW,
+      score: similarity(query, nameTW),
+    };
+  });
+
+  if (!results.length) {
+    await msg.reply(`❌ 找不到物品：「${query}」`);
+    return;
+  }
+
+  // 依相似度排序（不顯示文字，但仍用來排按鈕）
+  results.sort((a, b) => b.score - a.score);
+  const top = results.slice(0, 5);
+
+  // 按鈕（不顯示 ID，只顯示名稱）
+  const row = new ActionRowBuilder();
+  top.forEach((r, i) => {
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`pick_${r.id}`)
+        .setLabel(`${i + 1}. ${r.name}`)
+        .setStyle(ButtonStyle.Primary)
+    );
+  });
+
+  const prompt = await msg.reply({
+    content: `❓ 找不到「${query}」\n請從下列候選選擇正確物品：`,
+    components: [row],
+  });
+
+  // 候選訊息也自動刪（避免堆積）
+  setTimeout(() => {
+    prompt.delete().catch(() => {});
+  }, AUTO_DELETE_MINUTES * 60 * 1000);
+
+  const collector = prompt.createMessageComponentCollector({ time: 60000 });
+
+  collector.on("collect", async (i) => {
+    // 只允許原發問者點
+    if (i.user.id !== msg.author.id) {
+      await i.reply({ content: "這不是給你的選項喔", ephemeral: true });
+      return;
+    }
+
+    const pickedId = Number(i.customId.replace("pick_", ""));
+    const picked = top.find((t) => t.id === pickedId);
+    if (!picked) return;
+
+    // 記住別名（寫入 Disk）
+    manual[query] = pickedId;
+    saveManual(manual);
+
+    // 更新候選訊息（乾淨版，不帶 ID）
+    await i.update({
+      content: `✅ 已選擇：${picked.name}`,
+      components: [],
+    });
+
+    // 查價
+    await sendPrice(msg, pickedId, picked.name);
+  });
+
+  collector.on("end", async () => {
+    // 到期後移除按鈕，避免有人再點
+    try {
+      await prompt.edit({ components: [] });
+    } catch {}
+  });
 });
 
 /* ===============================
-   查 Universalis
+   查 Universalis（8 服最低單價 + 最低價伺服器）
 ================================ */
 async function sendPrice(msg, itemId, itemName) {
   const prices = [];
@@ -199,11 +231,13 @@ async function sendPrice(msg, itemId, itemName) {
   for (const w of WORLD_LIST) {
     try {
       const r = await fetch(
-        `https://universalis.app/api/v2/${encodeURIComponent(w)}/${itemId}?listings=20`
+        `https://universalis.app/api/v2/${encodeURIComponent(
+          w
+        )}/${itemId}?listings=20`
       );
       const d = await r.json();
       const min = d.listings?.length
-        ? Math.min(...d.listings.map(l => l.pricePerUnit))
+        ? Math.min(...d.listings.map((l) => l.pricePerUnit))
         : null;
       prices.push({ world: w, price: min });
     } catch {
@@ -211,7 +245,7 @@ async function sendPrice(msg, itemId, itemName) {
     }
   }
 
-  const valid = prices.filter(p => p.price !== null);
+  const valid = prices.filter((p) => p.price !== null);
   if (!valid.length) {
     await msg.reply("⚠️ 查不到任何價格資料");
     return;
@@ -222,9 +256,11 @@ async function sendPrice(msg, itemId, itemName) {
 
   const embed = new EmbedBuilder()
     .setTitle(`📦 ${itemName}`)
-    .setDescription(`🥇 最低價：${best.world} ・ ${best.price.toLocaleString()} gil`);
+    .setDescription(
+      `🥇 最低價：${best.world} ・ ${best.price.toLocaleString()} gil\n（下方列出你設定的所有伺服器最低單價）`
+    );
 
-  prices.forEach(p => {
+  prices.forEach((p) => {
     embed.addFields({
       name: p.world,
       value: p.price ? `${p.price.toLocaleString()} gil` : "—",
