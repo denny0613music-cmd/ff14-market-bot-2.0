@@ -1,3 +1,5 @@
+// === index.js（完整覆蓋版｜修正模糊詞不綁死）===
+
 import "dotenv/config";
 import fs from "fs";
 import http from "http";
@@ -16,9 +18,7 @@ import { Converter } from "opencc-js";
    基本設定
 ================================ */
 const PORT = process.env.PORT || 10000;
-const RAW_DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-const DISCORD_TOKEN =
-  typeof RAW_DISCORD_TOKEN === "string" ? RAW_DISCORD_TOKEN.trim() : RAW_DISCORD_TOKEN;
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN?.trim();
 const PRICE_CHANNEL_ID = process.env.PRICE_CHANNEL_ID;
 
 const WORLD_LIST = (process.env.WORLD_LIST || "")
@@ -27,7 +27,6 @@ const WORLD_LIST = (process.env.WORLD_LIST || "")
   .filter(Boolean);
 
 const AUTO_DELETE_MINUTES = Number(process.env.AUTO_DELETE_MINUTES || 30);
-const DEBUG_MODE = String(process.env.DEBUG_MODE).toLowerCase() === "true";
 
 /* ===============================
    Render health check
@@ -37,9 +36,7 @@ http
     res.writeHead(200);
     res.end("ok");
   })
-  .listen(PORT, () => {
-    console.log(`HTTP server listening on ${PORT}`);
-  });
+  .listen(PORT);
 
 /* ===============================
    OpenCC
@@ -48,7 +45,7 @@ const t2s = Converter({ from: "tw", to: "cn" });
 const s2t = Converter({ from: "cn", to: "tw" });
 
 /* ===============================
-   資料檔（Render Disk）
+   Render Disk（保留資料）
 ================================ */
 const MANUAL_FILE = fs.existsSync("/data")
   ? "/data/items_zh_manual.json"
@@ -58,39 +55,28 @@ if (!fs.existsSync(MANUAL_FILE)) {
   fs.writeFileSync(MANUAL_FILE, "{}", "utf8");
 }
 
-function loadManual() {
+const loadManual = () => {
   try {
     return JSON.parse(fs.readFileSync(MANUAL_FILE, "utf8"));
   } catch {
     return {};
   }
-}
-function saveManual(data) {
+};
+
+const saveManual = (data) => {
   fs.writeFileSync(MANUAL_FILE, JSON.stringify(data, null, 2), "utf8");
-}
+};
 
 /* ===============================
-   相似度（Levenshtein）
+   相似度
 ================================ */
 function similarity(a, b) {
   if (!a || !b) return 0;
-  const dp = Array.from({ length: a.length + 1 }, () =>
-    Array(b.length + 1).fill(0)
-  );
-  for (let i = 0; i <= a.length; i++) dp[i][0] = i;
-  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
-
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,
-        dp[i][j - 1] + 1,
-        dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
-      );
-    }
+  let same = 0;
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    if (a[i] === b[i]) same++;
   }
-  const dist = dp[a.length][b.length];
-  return 1 - dist / Math.max(a.length, b.length);
+  return same / Math.max(a.length, b.length);
 }
 
 /* ===============================
@@ -106,20 +92,10 @@ const client = new Client({
 
 client.once("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-  console.log(`📌 PRICE_CHANNEL_ID=${PRICE_CHANNEL_ID}`);
-  console.log(`🌍 WORLDS=${WORLD_LIST.join(",")}`);
-  console.log(`🧹 AUTO_DELETE_MINUTES=${AUTO_DELETE_MINUTES}`);
-  console.log(`🪲 DEBUG_MODE=${DEBUG_MODE}`);
-  console.log(`💾 MANUAL_FILE=${MANUAL_FILE}`);
-
-  const manual = loadManual();
-  console.log(
-    `📦 items loaded: base=0 manual=${Object.keys(manual).length} merged=${Object.keys(manual).length}`
-  );
 });
 
 /* ===============================
-   主流程：文字查價（在指定頻道）
+   主流程
 ================================ */
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
@@ -129,26 +105,19 @@ client.on("messageCreate", async (msg) => {
   if (!query) return;
 
   const manual = loadManual();
-  const manualHit = manual[query];
+  const manualId = manual[query];
 
-  // 1) 如果已記住，直接查
-  if (manualHit) {
-    await sendPrice(msg, manualHit, query);
-    return;
-  }
-
-  // 2) 否則走 CafeMaker 搜尋候選
-  const qCN = t2s(query);
+  // 🔍 永遠先搜尋
   let data;
   try {
     const res = await fetch(
       `https://cafemaker.wakingsands.com/search?string=${encodeURIComponent(
-        qCN
+        t2s(query)
       )}&indexes=item&limit=20`
     );
     data = await res.json();
   } catch {
-    await msg.reply("⚠️ 搜尋服務暫時不可用，請稍後再試。");
+    await msg.reply("⚠️ 搜尋服務暫時不可用");
     return;
   }
 
@@ -166,11 +135,20 @@ client.on("messageCreate", async (msg) => {
     return;
   }
 
-  // 依相似度排序（不顯示文字，但仍用來排按鈕）
+  // 排序
   results.sort((a, b) => b.score - a.score);
-  const top = results.slice(0, 5);
 
-  // 按鈕（不顯示 ID，只顯示名稱）
+  // ✅ 只有「唯一結果」才自動用
+  if (results.length === 1) {
+    await sendPrice(msg, results[0].id, results[0].name);
+    return;
+  }
+
+  // 🔘 多結果 → 顯示選擇（manual 只是排序參考）
+  const top = results
+    .sort((a, b) => (a.id === manualId ? -1 : 1))
+    .slice(0, 5);
+
   const row = new ActionRowBuilder();
   top.forEach((r, i) => {
     row.addComponents(
@@ -182,52 +160,29 @@ client.on("messageCreate", async (msg) => {
   });
 
   const prompt = await msg.reply({
-    content: `❓ 找不到「${query}」\n請從下列候選選擇正確物品：`,
+    content: `❓ 找到多個「${query}」相關物品，請選擇：`,
     components: [row],
   });
-
-  // 候選訊息也自動刪（避免堆積）
-  setTimeout(() => {
-    prompt.delete().catch(() => {});
-  }, AUTO_DELETE_MINUTES * 60 * 1000);
 
   const collector = prompt.createMessageComponentCollector({ time: 60000 });
 
   collector.on("collect", async (i) => {
-    // 只允許原發問者點
-    if (i.user.id !== msg.author.id) {
-      await i.reply({ content: "這不是給你的選項喔", ephemeral: true });
-      return;
-    }
+    if (i.user.id !== msg.author.id) return;
 
     const pickedId = Number(i.customId.replace("pick_", ""));
     const picked = top.find((t) => t.id === pickedId);
     if (!picked) return;
 
-    // 記住別名（寫入 Disk）
     manual[query] = pickedId;
     saveManual(manual);
 
-    // 更新候選訊息（乾淨版，不帶 ID）
-    await i.update({
-      content: `✅ 已選擇：${picked.name}`,
-      components: [],
-    });
-
-    // 查價
-    await sendPrice(msg, pickedId, picked.name);
-  });
-
-  collector.on("end", async () => {
-    // 到期後移除按鈕，避免有人再點
-    try {
-      await prompt.edit({ components: [] });
-    } catch {}
+    await i.update({ content: `✅ 已選擇：${picked.name}`, components: [] });
+    await sendPrice(msg, picked.id, picked.name);
   });
 });
 
 /* ===============================
-   查 Universalis（8 服最低單價 + 最低價伺服器）
+   查價
 ================================ */
 async function sendPrice(msg, itemId, itemName) {
   const prices = [];
@@ -249,7 +204,7 @@ async function sendPrice(msg, itemId, itemName) {
 
   const valid = prices.filter((p) => p.price !== null);
   if (!valid.length) {
-    await msg.reply("⚠️ 查不到任何價格資料");
+    await msg.reply("⚠️ 查不到價格資料");
     return;
   }
 
@@ -259,7 +214,7 @@ async function sendPrice(msg, itemId, itemName) {
   const embed = new EmbedBuilder()
     .setTitle(`📦 ${itemName}`)
     .setDescription(
-      `🥇 最低價：${best.world} ・ ${best.price.toLocaleString()} gil\n（下方列出你設定的所有伺服器最低單價）`
+      `🥇 最低價：${best.world} ・ ${best.price.toLocaleString()} gil`
     );
 
   prices.forEach((p) => {
@@ -271,59 +226,10 @@ async function sendPrice(msg, itemId, itemName) {
   });
 
   const reply = await msg.reply({ embeds: [embed] });
-
-  setTimeout(() => {
-    reply.delete().catch(() => {});
-  }, AUTO_DELETE_MINUTES * 60 * 1000);
+  setTimeout(() => reply.delete().catch(() => {}), AUTO_DELETE_MINUTES * 60 * 1000);
 }
 
 /* ===============================
    Login
 ================================ */
-(function login() {
-  const token = DISCORD_TOKEN;
-  const tokenType = typeof token;
-  const tokenLen = tokenType === "string" ? token.length : 0;
-  const hasWhitespace = tokenType === "string" ? /\s/.test(token) : false;
-  const startsWithBot = tokenType === "string" ? token.startsWith("Bot ") : false;
-
-  // ✅ 不印出 token 本體，只印「型態/長度/是否有空白」方便你在 Render log 直接定位
-  console.log(
-    `🔐 DISCORD_TOKEN type=${tokenType} length=${tokenLen} hasWhitespace=${hasWhitespace} startsWithBot=${startsWithBot}`
-  );
-
-  if (!token || tokenType !== "string") {
-    console.error(
-      "❌ DISCORD_TOKEN 不存在或不是字串。請到 Render → Environment 設定 Key=DISCORD_TOKEN 並重啟服務。"
-    );
-    return;
-  }
-
-  if (startsWithBot) {
-    console.error(
-      "❌ 你貼的是 'Bot xxxxx' 形式。client.login() 只要純 token，請把 'Bot ' 前綴移除。"
-    );
-    return;
-  }
-
-  if (hasWhitespace) {
-    console.error(
-      "❌ token 內含空白/換行。請在 Render 重新貼上（不要頭尾空白、不要換行）。"
-    );
-    return;
-  }
-
-  if (tokenLen < 40) {
-    console.error(
-      "❌ token 長度看起來太短，可能貼到 Client Secret 或貼錯欄位。請到 Discord Developer Portal → Bot → Reset Token 後複製新的 Bot Token。"
-    );
-    return;
-  }
-
-  client.login(token).catch((err) => {
-    console.error("❌ Discord login failed:", err);
-    console.error(
-      "👉 若你剛剛 Reset Token，請把 Render 的 DISCORD_TOKEN 換成新的並重啟。"
-    );
-  });
-})();
+client.login(DISCORD_TOKEN);
