@@ -169,25 +169,37 @@ function similarity(a, b) {
 ================================ */
 function isGenericQuery(qTw) {
   const q = normalizeText(qTw);
-  // 太短 / 太泛：不記憶
-  if (q.length <= 3) return true;
 
-  // 只有一個詞且太短（例如：小牛皮、防水、棉布）
+  // 太短：不記憶（2 字以下幾乎一定太泛）
+  if (q.length <= 2) return true;
+
+  // 常見「泛詞」：不記憶（避免把關鍵字綁死到單一物品）
+  // 只針對短詞/分類詞，不影響完整物品名（例如「耐水棉布」）
+  const GENERIC_WORDS = new Set([
+    "防水","耐水","小牛皮","牛皮","棉布","綿布","皮革","布","鞋","外套","上衣","褲","長褲","短褲","戒指","項鍊","耳環","手套","帽","帽子"
+  ]);
+  if (q.length <= 4 && GENERIC_WORDS.has(q)) return true;
+
+  // 如果只有一個 token 且很短，也視為泛詞（例如：小牛皮）
   const tokens = q.split(/\s+/).filter(Boolean);
-  if (tokens.length <= 1 && q.length <= 4) return true;
-
-  // 全是漢字且很短（<=3）已在上面處理；<=4 也可能太泛
-  const onlyHan = /^[\p{Script=Han}]+$/u.test(q);
-  if (onlyHan && q.length <= 4) return true;
+  if (tokens.length <= 1 && q.length <= 3) return true;
 
   return false;
 }
 
 function shouldRememberAlias(qTw, pickedNameTw) {
-  // 只記「具體輸入」；太泛不記
-  const rememberQuery = !isGenericQuery(qTw);
-  // 物品正式名也做基本防呆：太短不記
+  const q = normalizeText(qTw);
+  const picked = normalizeText(pickedNameTw);
+
+  // ✅ 若你輸入的名稱與候選正式名完全相同，代表很具體：一定可以記住
+  // 例如：耐水棉布 → 候選也是「耐水棉布」
+  const exactSame = q.length >= 3 && q === picked;
+
+  const rememberQuery = exactSame ? true : !isGenericQuery(qTw);
+
+  // 正式名也做防呆：避免把「布」「鞋」這類短分類詞寫進 alias
   const rememberPicked = !isGenericQuery(pickedNameTw);
+
   return { rememberQuery, rememberPicked };
 }
 
