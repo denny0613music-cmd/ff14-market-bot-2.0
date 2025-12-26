@@ -1,63 +1,106 @@
-import { Client, GatewayIntentBits } from 'discord.js';
-import dotenv from 'dotenv';
-import fetch from 'node-fetch';  // 正確導入 node-fetch
+import "dotenv/config";
+import { Client, GatewayIntentBits } from "discord.js";
+import fetch from "node-fetch";
+import fs from "fs";
 
-dotenv.config();
+const ITEMS_FILE = "./items_zh_tw.json";
+const WORLD = (process.env.WORLD || "bahamut").trim(); // 你可改成自己的世界
 
-// 設定 Bot 的 intents
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-  ]
-});
+function buildLookup(raw) {
+  const lookup = {};
 
-// 當 Bot 上線後顯示訊息
-client.once('ready', () => {
-  console.log(`Logged in as ${client.user.tag}`);
-});
-
-// 市場價格查詢
-async function getMarketPrice(itemId) {
-  const url = `https://universalis.app/api/v2/market/${itemId}`;
-  const res = await fetch(url);
-  const data = await res.json();
-
-  if (data && data.price) {
-    return `Price: ${data.price.min}`;
-  } else {
-    return 'Market price not found.';
+  // Array format
+  if (Array.isArray(raw)) {
+    for (const it of raw) {
+      const id = Number(it?.id);
+      const name = (it?.zh || it?.name || it?.en || "").trim();
+      if (id && name) lookup[name] = id;
+    }
+    return lookup;
   }
+
+  // Object format
+  if (raw && typeof raw === "object") {
+    const keys = Object.keys(raw);
+    const numericKeyCount = keys.slice(0, 50).filter((k) => /^\d+$/.test(k)).length;
+
+    if (numericKeyCount > 0) {
+      // id -> name 反轉成 name -> id
+      for (const [idStr, nameVal] of Object.entries(raw)) {
+        const id = Number(idStr);
+        const name = String(nameVal || "").trim();
+        if (id && name) lookup[name] = id;
+      }
+      return lookup;
+    }
+
+    // name -> id
+    for (const [name, idVal] of Object.entries(raw)) {
+      const id = Number(idVal);
+      const n = String(name || "").trim();
+      if (n && id) lookup[n] = id;
+    }
+    return lookup;
+  }
+
+  return lookup;
 }
 
-const itemLookup = {
-  "鐵礦": 1675,
-  "魔法水": 1676,
-};
+let itemLookup = {};
+try {
+  const raw = JSON.parse(fs.readFileSync(ITEMS_FILE, "utf8"));
+  itemLookup = buildLookup(raw);
+  console.log(`✅ items loaded: ${Object.keys(itemLookup).length}`);
+} catch (e) {
+  console.error(`❌ Failed to load ${ITEMS_FILE}:`, e);
+  itemLookup = {};
+}
 
-// 處理訊息命令
-client.on('messageCreate', async (message) => {
-  // 忽略機器人自己的訊息
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+});
+
+client.once("ready", () => {
+  console.log(`✅ Logged in as ${client.user.tag}`);
+  console.log(`🌍 WORLD=${WORLD}`);
+});
+
+async function getMarketPrice(itemId) {
+  const url = `https://universalis.app/api/v2/${encodeURIComponent(WORLD)}/${itemId}?listings=10`;
+  const res = await fetch(url);
+
+  if (!res.ok) throw new Error(`Universalis HTTP ${res.status}`);
+  const data = await res.json();
+
+  const listings = Array.isArray(data?.listings) ? data.listings : [];
+  if (listings.length === 0) return "No listings";
+
+  let min = listings[0].pricePerUnit;
+  for (const l of listings) {
+    if (typeof l?.pricePerUnit === "number" && l.pricePerUnit < min) min = l.pricePerUnit;
+  }
+  return `${min.toLocaleString()} Gil`;
+}
+
+client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
-  // 如果訊息是 "!P"
-  if (message.content.startsWith('!P')) {
-    const keyword = message.content.slice(3).trim();  // 取出 "!P" 後的物品名稱
-    
-    if (!keyword) {
-      return message.reply('請提供要查詢的物品名稱。');
-    }
+  const content = message.content.trim();
+  if (!content.toLowerCase().startsWith("!p")) return;
 
-    const itemId = itemLookup[keyword];
-    if (!itemId) {
-      return message.reply(`找不到與 "${keyword}" 匹配的物品。`);
-    }
+  const keyword = content.slice(2).trim(); // "!p" 後面全部當物品名
+  if (!keyword) return message.reply("Usage: `!P <item name>` e.g. `!P Iron Ore`");
 
+  const itemId = itemLookup[keyword];
+  if (!itemId) return message.reply(`❌ Not found: ${keyword}`);
+
+  try {
     const price = await getMarketPrice(itemId);
-    await message.reply(`你查詢的物品是：${keyword}\n價格：${price}`);
+    await message.reply(`📦 Item: ${keyword}\n🆔 ID: ${itemId}\n💰 Lowest: ${price}`);
+  } catch (e) {
+    console.error(e);
+    await message.reply(`⚠️ Query failed: ${String(e.message || e)}`);
   }
 });
 
-// 登入 Bot
 client.login(process.env.BOT_TOKEN);
