@@ -232,10 +232,21 @@ client.on("messageCreate", async (message) => {
     const text = message.content.trim();
     if (!text) return;
 
+    // 解析使用者輸入（支援自然語言：自動去掉「價格/市價/查價」等字）
     let query = text;
-    if (text.toLowerCase().startsWith("!p")) query = text.slice(2).trim();
 
-    const isPriceIntent = /多少錢|幾錢|價格|行情|市價|price|查價/i.test(text);
+    if (text.toLowerCase().startsWith("!p")) {
+      // 指令：!p 鐵礦
+      query = text.slice(2).trim();
+    } else {
+      // 自然語言：鐵礦 價格 / 查價 鐵礦 / 鐵礦市價...
+      query = text
+        .replace(/價格|市價|行情|多少錢|幾錢|查價|查詢|price/gi, "")
+        .replace(/^查(一下|一個|個|詢)?/i, "")
+        .trim();
+    }
+
+    const isPriceIntent = /多少錢|幾錢|價格|行情|市價|price|查價|查詢/i.test(text);
     const localHit = resolveFromLocal(query)?.id;
     if (!text.toLowerCase().startsWith("!p") && !isPriceIntent && !localHit) return;
     if (!query) return;
