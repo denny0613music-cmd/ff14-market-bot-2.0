@@ -6,40 +6,45 @@ import { createRequire } from "module";
 import { Client, GatewayIntentBits, EmbedBuilder } from "discord.js";
 
 const require = createRequire(import.meta.url);
-const OpenCC = require("opencc-js"); // ✅ CJS 方式載入，Render/Node22 穩
+const OpenCC = require("opencc-js");
 
 /* ===============================
-   Render 健康檢查（一定要）
+   Debug Mode
+================================ */
+const DEBUG_MODE = String(process.env.DEBUG_MODE || "").toLowerCase() === "true";
+const debug = (...args) => DEBUG_MODE && console.log("🪲 DEBUG:", ...args);
+
+/* ===============================
+   Render 健康檢查
 ================================ */
 const PORT = process.env.PORT || 10000;
-http
-  .createServer((req, res) => {
-    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("ok");
-  })
-  .listen(PORT, () => console.log(`HTTP server listening on ${PORT}`));
+http.createServer((_, res) => {
+  res.writeHead(200);
+  res.end("ok");
+}).listen(PORT, () => console.log(`HTTP server listening on ${PORT}`));
 
 /* ===============================
    Env
 ================================ */
 const DISCORD_TOKEN = (process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || "").trim();
-if (!DISCORD_TOKEN) console.warn("⚠️ Missing DISCORD_TOKEN / BOT_TOKEN");
-
 const PRICE_CHANNEL_ID = (process.env.PRICE_CHANNEL_ID || "").trim();
-
 const WORLD_LIST = (process.env.WORLD_LIST || "").trim();
 const WORLD_SINGLE = (process.env.WORLD || "Bahamut").trim();
 
 const ITEMS_FILE = "./items_zh_tw.json";
 const MANUAL_FILE = "./items_zh_manual.json";
-
 const XIVAPI_BASE = "https://cafemaker.wakingsands.com";
 
-// ✅ 等效 s2t：cn -> tw（依你需求）
+/* ===============================
+   OpenCC
+================================ */
+// 簡 → 繁（顯示）
 const s2t = OpenCC.Converter({ from: "cn", to: "tw" });
+// 繁 → 簡（搜尋）
+const t2s = OpenCC.Converter({ from: "tw", to: "cn" });
 
 /* ===============================
-   台服伺服器名稱（顯示用：繁中）
+   台服伺服器顯示名稱
 ================================ */
 const WORLD_NAME_ZH = {
   Ifrit: "伊弗利特",
@@ -51,17 +56,16 @@ const WORLD_NAME_ZH = {
   Titan: "泰坦",
   Ramuh: "拉姆",
 };
+const displayWorldName = (w) => WORLD_NAME_ZH[w] || w;
 
-function displayWorldName(world) {
-  return WORLD_NAME_ZH[world] || world;
-}
-
+/* ===============================
+   Utils
+================================ */
 function normalizeKey(s) {
   return String(s || "")
     .toLowerCase()
-    .trim()
-    .replace(/[’'`]/g, "")
     .replace(/\s+/g, "")
+    .replace(/[’'`]/g, "")
     .replace(/[：:]/g, "：");
 }
 
@@ -69,10 +73,8 @@ function loadJson(path, fallback = {}) {
   try {
     if (!fs.existsSync(path)) return fallback;
     const txt = fs.readFileSync(path, "utf8").trim();
-    if (!txt) return fallback;
-    return JSON.parse(txt);
-  } catch (e) {
-    console.warn(`⚠️ Failed to read ${path}: ${e.message || e}`);
+    return txt ? JSON.parse(txt) : fallback;
+  } catch {
     return fallback;
   }
 }
@@ -83,9 +85,14 @@ function saveJsonAtomic(path, obj) {
   fs.renameSync(tmp, path);
 }
 
-function ensureManualFileExists() {
+function ensureManualFile() {
   if (!fs.existsSync(MANUAL_FILE)) saveJsonAtomic(MANUAL_FILE, {});
 }
+
+/* ===============================
+   Item Index
+================================ */
+ensureManualFile();
 
 function buildIndexes() {
   const base = loadJson(ITEMS_FILE, {});
@@ -94,112 +101,72 @@ function buildIndexes() {
 
   const norm = new Map();
   for (const [name, id] of Object.entries(merged)) {
-    const n = normalizeKey(name);
-    const nId = Number(id);
-    if (!n || !Number.isFinite(nId)) continue;
-
-    const cur = norm.get(n);
-    if (!cur || nId < cur.id) norm.set(n, { name, id: nId });
+    const key = normalizeKey(name);
+    if (key && Number.isFinite(Number(id))) {
+      norm.set(key, { name, id: Number(id) });
+    }
   }
 
   console.log(
     `📦 items loaded: base=${Object.keys(base).length} manual=${Object.keys(manual).length} merged=${Object.keys(merged).length}`
   );
-  return { base, manual, merged, norm };
+  return norm;
 }
 
-ensureManualFileExists();
-let indexes = buildIndexes();
+let ITEM_INDEX = buildIndexes();
 
-async function fetchJson(url, retry = 3) {
-  for (let i = 0; i < retry; i++) {
-    try {
-      const res = await fetch(url, { headers: { "User-Agent": "ff14-market-bot/1.0" } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
-    } catch (e) {
-      if (i === retry - 1) throw e;
-      await new Promise((r) => setTimeout(r, 600 * (i + 1)));
-    }
-  }
-  return null;
-}
-
-function toZhtw(chs) {
-  const t = String(chs || "").trim();
-  if (!t) return "";
-  try {
-    return String(s2t(t)).trim();
-  } catch {
-    return t;
-  }
+/* ===============================
+   API Helpers
+================================ */
+async function fetchJson(url) {
+  debug("fetch:", url);
+  const res = await fetch(url, { headers: { "User-Agent": "ff14-market-bot/1.0" } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }
 
 function getWorlds() {
-  if (WORLD_LIST) return WORLD_LIST.split(",").map((s) => s.trim()).filter(Boolean);
+  if (WORLD_LIST) return WORLD_LIST.split(",").map((w) => w.trim());
   return [WORLD_SINGLE];
 }
 
-async function fetchMarket(world, itemId) {
-  const url = `https://universalis.app/api/v2/${encodeURIComponent(world)}/${itemId}?listings=20&entries=0`;
-  const data = await fetchJson(url, 4);
-  return data;
+/* ===============================
+   Item Resolve
+================================ */
+function resolveLocal(query) {
+  const hit = ITEM_INDEX.get(normalizeKey(query));
+  debug("local resolve:", hit);
+  return hit || null;
 }
 
-function getMinPrice(listings) {
-  if (!Array.isArray(listings) || listings.length === 0) return null;
-  let min = null;
-  for (const l of listings) {
-    const p = Number(l?.pricePerUnit);
-    if (!Number.isFinite(p)) continue;
-    if (min == null || p < min) min = p;
-  }
-  return min;
-}
+async function resolveViaCafeMaker(queryTw) {
+  const queryChs = t2s(queryTw); // ⭐ 繁 → 簡（關鍵）
+  debug("fallback CafeMaker, tw:", queryTw, "chs:", queryChs);
 
-function resolveFromLocal(query) {
-  const q = normalizeKey(query);
-  const hit = indexes.norm.get(q);
-  return hit?.id ? { id: hit.id, name: hit.name } : null;
-}
+  const url = `${XIVAPI_BASE}/search?string=${encodeURIComponent(
+    queryChs
+  )}&indexes=item&language=chs&limit=1`;
 
-async function resolveViaCafeMaker(query) {
-  const q = String(query || "").trim();
-  if (!q) return null;
+  const data = await fetchJson(url);
+  const r = data?.Results?.[0];
+  if (!r) return null;
 
-  const url = `${XIVAPI_BASE}/search?string=${encodeURIComponent(q)}&indexes=item&language=chs&limit=5`;
-  const data = await fetchJson(url, 3);
-  const results = Array.isArray(data?.Results) ? data.Results : [];
-  if (!results.length) return null;
+  const id = Number(r.ID);
+  const nameTw = s2t(r.Name);
 
-  const best = results[0];
-  const id = Number(best?.ID);
-  const nameChs = String(best?.Name || "").trim();
-  if (!Number.isFinite(id) || !nameChs) return null;
-
-  const nameZhtw = toZhtw(nameChs) || nameChs;
-
-  // 寫入 manual：使用者原輸入 + 正式繁中名
   const manual = loadJson(MANUAL_FILE, {});
-  manual[nameZhtw] = id;
-  manual[q] = id;
+  manual[nameTw] = id;
+  manual[queryTw] = id;
   saveJsonAtomic(MANUAL_FILE, manual);
-  indexes = buildIndexes();
 
-  return { id, name: nameZhtw, source: "cafemaker" };
+  ITEM_INDEX = buildIndexes();
+  debug("cafemaker resolved:", { id, nameTw });
+
+  return { id, name: nameTw };
 }
 
 async function resolveItem(query) {
-  const local = resolveFromLocal(query);
-  if (local) return local;
-
-  try {
-    const r = await resolveViaCafeMaker(query);
-    if (r?.id) return r;
-  } catch (e) {
-    console.warn(`⚠️ CafeMaker resolve failed: ${e.message || e}`);
-  }
-  return null;
+  return resolveLocal(query) || (await resolveViaCafeMaker(query));
 }
 
 /* ===============================
@@ -211,85 +178,61 @@ const client = new Client({
 
 client.once("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-  console.log(`📌 PRICE_CHANNEL_ID=${PRICE_CHANNEL_ID || "(not set - reply everywhere)"}`);
+  console.log(`📌 PRICE_CHANNEL_ID=${PRICE_CHANNEL_ID}`);
   console.log(`🌍 WORLDS=${getWorlds().join(",")}`);
+  console.log(`🪲 DEBUG_MODE=${DEBUG_MODE}`);
 });
 
-const replied = new Set();
-function markReplied(id) {
-  replied.add(id);
-  setTimeout(() => replied.delete(id), 10_000);
-}
+client.on("messageCreate", async (msg) => {
+  if (msg.author.bot) return;
+  if (PRICE_CHANNEL_ID && msg.channelId !== PRICE_CHANNEL_ID) return;
 
-client.on("messageCreate", async (message) => {
-  try {
-    if (!message?.content) return;
-    if (message.author?.bot) return;
-    if (replied.has(message.id)) return;
+  let text = msg.content.trim();
+  if (!text) return;
 
-    if (PRICE_CHANNEL_ID && message.channelId !== PRICE_CHANNEL_ID) return;
+  let query = text.startsWith("!p")
+    ? text.slice(2).trim()
+    : text.replace(/價格|市價|行情|多少錢|幾錢|查價|查詢|price/gi, "").trim();
 
-    const text = message.content.trim();
-    if (!text) return;
+  if (!query) return;
 
-    // 解析使用者輸入（支援自然語言：自動去掉「價格/市價/查價」等字）
-    let query = text;
+  debug("user input:", text, "→ query:", query);
 
-    if (text.toLowerCase().startsWith("!p")) {
-      // 指令：!p 鐵礦
-      query = text.slice(2).trim();
-    } else {
-      // 自然語言：鐵礦 價格 / 查價 鐵礦 / 鐵礦市價...
-      query = text
-        .replace(/價格|市價|行情|多少錢|幾錢|查價|查詢|price/gi, "")
-        .replace(/^查(一下|一個|個|詢)?/i, "")
-        .trim();
-    }
-
-    const isPriceIntent = /多少錢|幾錢|價格|行情|市價|price|查價|查詢/i.test(text);
-    const localHit = resolveFromLocal(query)?.id;
-    if (!text.toLowerCase().startsWith("!p") && !isPriceIntent && !localHit) return;
-    if (!query) return;
-
-    markReplied(message.id);
-    await message.channel.sendTyping();
-
-    const resolved = await resolveItem(query);
-    if (!resolved) return message.reply(`❌ 找不到物品：「${query}」\n貼更完整名稱再試一次。`);
-
-    const worlds = getWorlds();
-    const results = await Promise.allSettled(
-      worlds.map(async (w) => {
-        const data = await fetchMarket(w, resolved.id);
-        const min = getMinPrice(data?.listings);
-        return { world: w, min };
-      })
+  const item = await resolveItem(query);
+  if (!item) {
+    return msg.reply(
+      DEBUG_MODE
+        ? `❌ 找不到物品\n原始輸入：${text}\n解析後：${query}`
+        : `❌ 找不到物品：「${query}」`
     );
-
-    const cleaned = results.map((r, i) => (r.status === "fulfilled" ? r.value : { world: worlds[i], min: null }));
-    const available = cleaned.filter((x) => x.min != null).sort((a, b) => a.min - b.min);
-    const best = available[0] || null;
-
-    const embed = new EmbedBuilder()
-      .setTitle(`📦 ${resolved.name}`)
-      .setDescription(`🆔 ItemID: **${resolved.id}**`)
-      .addFields({
-        name: "🥇 最低價",
-        value: best
-          ? `**${displayWorldName(best.world)}**：**${best.min.toLocaleString()}** gil`
-          : "查不到任何上架資料",
-      });
-
-    const lines = cleaned
-      .map((x) => `• ${displayWorldName(x.world)}：${x.min == null ? "—" : `${x.min.toLocaleString()} gil`}`)
-      .slice(0, 12);
-    embed.addFields({ name: "📋 各服最低單價", value: lines.join("\n") || "—" });
-
-    return message.reply({ embeds: [embed] });
-  } catch (e) {
-    console.error(e);
-    return message.reply(`⚠️ 發生錯誤：${String(e.message || e)}`);
   }
+
+  const worlds = getWorlds();
+  const prices = [];
+
+  for (const w of worlds) {
+    try {
+      const data = await fetchJson(
+        `https://universalis.app/api/v2/${w}/${item.id}?listings=20&entries=0`
+      );
+      const min = Math.min(...data.listings.map((l) => l.pricePerUnit));
+      if (Number.isFinite(min)) prices.push({ w, min });
+    } catch (e) {
+      debug("market fail:", w, e.message);
+    }
+  }
+
+  if (!prices.length) return msg.reply("⚠️ 查不到任何價格資料");
+
+  prices.sort((a, b) => a.min - b.min);
+  const best = prices[0];
+
+  const embed = new EmbedBuilder()
+    .setTitle(`📦 ${item.name}`)
+    .setDescription(`🥇 **${displayWorldName(best.w)}**：**${best.min.toLocaleString()}** gil`)
+    .setFooter({ text: DEBUG_MODE ? "🪲 Debug Mode ON" : "" });
+
+  await msg.reply({ embeds: [embed] });
 });
 
 client.login(DISCORD_TOKEN);
