@@ -1,41 +1,30 @@
 import fs from "fs";
 import fetch from "node-fetch";
 import pLimit from "p-limit";
-import OpenCC from "opencc-js";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const OpenCC = require("opencc-js"); // ✅ Render/Node22 穩
 
 /*
-  build_items_zh_tw_full.js
-  ------------------------
-  1) 從 Universalis 取得可交易物品 ID
-  2) 用 CafeMaker (XIVAPI) 抓簡中名稱
-  3) 用 opencc-js (s2t 等效：cn -> tw) 轉成繁中
-  4) 輸出 items_zh_tw.json (繁中名稱 -> itemId)
-
-  ✅ 可續跑：會寫 items_zh_tw.checkpoint.json
-  ✅ 失敗清單：items_zh_tw_failed.json
-
-  跑法：
-    npm run build:items
+  1) Universalis 取 marketable IDs
+  2) CafeMaker 取簡中 Name
+  3) OpenCC cn->tw 轉繁中
+  4) 輸出 items_zh_tw.json (繁中 name -> id)
 */
 
-// ===== 可調參數 =====
 const CONCURRENCY = Number(process.env.BUILD_CONCURRENCY || 4);
 const BATCH_SIZE = Number(process.env.BUILD_BATCH_SIZE || 300);
 const API_TIMEOUT_MS = Number(process.env.BUILD_TIMEOUT_MS || 20000);
 
-// CafeMaker (XIVAPI)
 const XIVAPI_BASE = "https://cafemaker.wakingsands.com";
 
-// 輸出檔案
-const OUT_FILE = "./items_zh_tw.json"; // 繁中 name -> id
-const OUT_ID_FILE = "./items_zh_tw_id.json"; // id -> 繁中 name
+const OUT_FILE = "./items_zh_tw.json";
+const OUT_ID_FILE = "./items_zh_tw_id.json";
 const CHECKPOINT_FILE = "./items_zh_tw.checkpoint.json";
 const FAIL_FILE = "./items_zh_tw_failed.json";
 
-// opencc-js：沒有 new OpenCC('s2t') 這種介面
-// 這裡用 Converter({from:'cn',to:'tw'}) 等效你要的 s2t
 const s2t = OpenCC.Converter({ from: "cn", to: "tw" });
-
 const limit = pLimit(CONCURRENCY);
 
 async function sleep(ms) {
@@ -76,7 +65,6 @@ function loadJsonIfExists(path, fallback) {
   return fallback;
 }
 
-/** ✅ 原子寫入：避免半截 JSON */
 function saveJsonAtomic(path, obj) {
   const tmp = `${path}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(obj, null, 2), "utf8");
@@ -93,7 +81,6 @@ function toZhtw(chs) {
   const t = String(chs || "").trim();
   if (!t) return "";
   try {
-    // Converter 回傳同步函式
     return String(s2t(t)).trim();
   } catch {
     return t;
@@ -111,7 +98,6 @@ async function main() {
   console.log(`▶️ Build items zh-tw mapping`);
   console.log(`   CONCURRENCY=${CONCURRENCY} BATCH_SIZE=${BATCH_SIZE}`);
 
-  // 1) 先抓可交易 item IDs（Universalis）
   const marketableIds = await fetchJson("https://universalis.app/api/v2/marketable");
   if (!Array.isArray(marketableIds) || marketableIds.length === 0) {
     console.log("❌ Failed to fetch marketable IDs from Universalis.");
@@ -119,16 +105,11 @@ async function main() {
   }
   console.log(`✅ marketable ids: ${marketableIds.length}`);
 
-  // 2) 從 checkpoint 繼續（name->id）
   let nameToId = loadJsonIfExists(CHECKPOINT_FILE, loadJsonIfExists(OUT_FILE, {}));
   let failed = loadJsonIfExists(FAIL_FILE, []);
-
-  // 3) 反向表（id->name）
   let idToName = loadJsonIfExists(OUT_ID_FILE, {});
 
-  // 已做過的 id（避免重抓）
   const doneIdSet = new Set(Object.values(nameToId).map((v) => Number(v)));
-
   const batches = chunkArray(marketableIds, BATCH_SIZE);
 
   for (let bi = 0; bi < batches.length; bi++) {
@@ -152,13 +133,10 @@ async function main() {
           return;
         }
 
-        // name -> id（同名保留較小 id）
         if (!nameToId[zhtw] || nId < Number(nameToId[zhtw])) {
           nameToId[zhtw] = nId;
         }
-        // id -> name
         idToName[String(nId)] = zhtw;
-
         doneIdSet.add(nId);
       })
     );
@@ -175,7 +153,6 @@ async function main() {
     );
   }
 
-  // 最後輸出正式檔
   saveJsonAtomic(OUT_FILE, nameToId);
   saveJsonAtomic(OUT_ID_FILE, idToName);
   console.log(`🎉 Done! items=${Object.keys(nameToId).length}, failed=${failed.length}`);

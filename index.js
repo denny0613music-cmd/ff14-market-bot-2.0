@@ -2,8 +2,11 @@ import "dotenv/config";
 import http from "http";
 import fs from "fs";
 import fetch from "node-fetch";
-import OpenCC from "opencc-js";
+import { createRequire } from "module";
 import { Client, GatewayIntentBits, EmbedBuilder } from "discord.js";
+
+const require = createRequire(import.meta.url);
+const OpenCC = require("opencc-js"); // ✅ CJS 方式載入，Render/Node22 穩
 
 /* ===============================
    Render 健康檢查（一定要）
@@ -20,32 +23,23 @@ http
    Env
 ================================ */
 const DISCORD_TOKEN = (process.env.DISCORD_TOKEN || process.env.BOT_TOKEN || "").trim();
-if (!DISCORD_TOKEN) {
-  console.warn("⚠️ Missing DISCORD_TOKEN / BOT_TOKEN");
-}
+if (!DISCORD_TOKEN) console.warn("⚠️ Missing DISCORD_TOKEN / BOT_TOKEN");
 
-// ✅ 只在指定頻道回覆（強烈建議設定）
 const PRICE_CHANNEL_ID = (process.env.PRICE_CHANNEL_ID || "").trim();
 
-// 你可以在 Render 設：WORLD_LIST=Ifrit,Garuda,Leviathan,Phoenix,Odin,Bahamut,Titan,Ramuh
 const WORLD_LIST = (process.env.WORLD_LIST || "").trim();
-// 或只查單服：WORLD=Bahamut
 const WORLD_SINGLE = (process.env.WORLD || "Bahamut").trim();
 
-// 物品字典（繁中 -> ID）
-const ITEMS_FILE = "./items_zh_tw.json"; // build_items_zh_tw_full.js 產生
-const MANUAL_FILE = "./items_zh_manual.json"; // 查不到時自動補
+const ITEMS_FILE = "./items_zh_tw.json";
+const MANUAL_FILE = "./items_zh_manual.json";
 
-// CafeMaker(XIVAPI)（取簡中）
 const XIVAPI_BASE = "https://cafemaker.wakingsands.com";
 
-// opencc-js：沒有 new OpenCC('s2t') 這種介面
-// 這裡用 Converter({from:'cn',to:'tw'}) 等效你要的 s2t
+// ✅ 等效 s2t：cn -> tw（依你需求）
 const s2t = OpenCC.Converter({ from: "cn", to: "tw" });
 
 /* ===============================
    台服伺服器名稱（顯示用：繁中）
-   ⚠️ 只用來顯示，不影響 Universalis API
 ================================ */
 const WORLD_NAME_ZH = {
   Ifrit: "伊弗利特",
@@ -83,7 +77,6 @@ function loadJson(path, fallback = {}) {
   }
 }
 
-/** ✅ 原子寫入：避免半截 JSON */
 function saveJsonAtomic(path, obj) {
   const tmp = `${path}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(obj, null, 2), "utf8");
@@ -94,19 +87,13 @@ function ensureManualFileExists() {
   if (!fs.existsSync(MANUAL_FILE)) saveJsonAtomic(MANUAL_FILE, {});
 }
 
-/* ===============================
-   Load item dictionaries
-   - base: items_zh_tw.json  (繁中 -> id)
-   - manual: items_zh_manual.json (別名/你自己補) 會覆蓋 base
-================================ */
 function buildIndexes() {
   const base = loadJson(ITEMS_FILE, {});
   const manual = loadJson(MANUAL_FILE, {});
   const merged = { ...base, ...manual };
 
-  const norm = new Map(); // normalizedName -> {name, id}
+  const norm = new Map();
   for (const [name, id] of Object.entries(merged)) {
-    if (!name) continue;
     const n = normalizeKey(name);
     const nId = Number(id);
     if (!n || !Number.isFinite(nId)) continue;
@@ -124,17 +111,10 @@ function buildIndexes() {
 ensureManualFileExists();
 let indexes = buildIndexes();
 
-/* ===============================
-   CafeMaker fallback
-   - local 查不到 → 用中文搜尋拿 ID
-   - 取到後把「繁中名稱」+「使用者原輸入」都寫入 manual
-================================ */
 async function fetchJson(url, retry = 3) {
   for (let i = 0; i < retry; i++) {
     try {
-      const res = await fetch(url, {
-        headers: { "User-Agent": "ff14-market-bot/1.0 (resolver)" },
-      });
+      const res = await fetch(url, { headers: { "User-Agent": "ff14-market-bot/1.0" } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } catch (e) {
@@ -155,12 +135,40 @@ function toZhtw(chs) {
   }
 }
 
+function getWorlds() {
+  if (WORLD_LIST) return WORLD_LIST.split(",").map((s) => s.trim()).filter(Boolean);
+  return [WORLD_SINGLE];
+}
+
+async function fetchMarket(world, itemId) {
+  const url = `https://universalis.app/api/v2/${encodeURIComponent(world)}/${itemId}?listings=20&entries=0`;
+  const data = await fetchJson(url, 4);
+  return data;
+}
+
+function getMinPrice(listings) {
+  if (!Array.isArray(listings) || listings.length === 0) return null;
+  let min = null;
+  for (const l of listings) {
+    const p = Number(l?.pricePerUnit);
+    if (!Number.isFinite(p)) continue;
+    if (min == null || p < min) min = p;
+  }
+  return min;
+}
+
+function resolveFromLocal(query) {
+  const q = normalizeKey(query);
+  const hit = indexes.norm.get(q);
+  return hit?.id ? { id: hit.id, name: hit.name } : null;
+}
+
 async function resolveViaCafeMaker(query) {
   const q = String(query || "").trim();
   if (!q) return null;
 
   const url = `${XIVAPI_BASE}/search?string=${encodeURIComponent(q)}&indexes=item&language=chs&limit=5`;
-  const data = await fetchJson(url);
+  const data = await fetchJson(url, 3);
   const results = Array.isArray(data?.Results) ? data.Results : [];
   if (!results.length) return null;
 
@@ -171,64 +179,20 @@ async function resolveViaCafeMaker(query) {
 
   const nameZhtw = toZhtw(nameChs) || nameChs;
 
-  // 寫入 manual：使用者原輸入 + 正式繁中名 都指到同一個 id
+  // 寫入 manual：使用者原輸入 + 正式繁中名
   const manual = loadJson(MANUAL_FILE, {});
   manual[nameZhtw] = id;
   manual[q] = id;
   saveJsonAtomic(MANUAL_FILE, manual);
-
-  // 重建索引
   indexes = buildIndexes();
 
   return { id, name: nameZhtw, source: "cafemaker" };
 }
 
-/* ===============================
-   Market query
-================================ */
-function getWorlds() {
-  if (WORLD_LIST) {
-    return WORLD_LIST.split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-  return [WORLD_SINGLE];
-}
-
-async function fetchMarket(world, itemId) {
-  const url = `https://universalis.app/api/v2/${encodeURIComponent(world)}/${itemId}?listings=20`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Universalis HTTP ${res.status}`);
-  return await res.json();
-}
-
-function getMinPrice(listings) {
-  if (!Array.isArray(listings) || listings.length === 0) return null;
-  let min = null;
-  for (const l of listings) {
-    const p = l?.pricePerUnit;
-    if (typeof p !== "number") continue;
-    if (min == null || p < min) min = p;
-  }
-  return min;
-}
-
-/* ===============================
-   Resolve item
-================================ */
-function resolveFromLocal(query) {
-  const q = normalizeKey(query);
-  const hit = indexes.norm.get(q);
-  if (hit?.id) return { id: hit.id, name: hit.name };
-  return null;
-}
-
 async function resolveItem(query) {
-  // 1) local
   const local = resolveFromLocal(query);
   if (local) return local;
 
-  // 2) CafeMaker fallback
   try {
     const r = await resolveViaCafeMaker(query);
     if (r?.id) return r;
@@ -263,16 +227,11 @@ client.on("messageCreate", async (message) => {
     if (message.author?.bot) return;
     if (replied.has(message.id)) return;
 
-    // ✅ 只在指定頻道回覆
     if (PRICE_CHANNEL_ID && message.channelId !== PRICE_CHANNEL_ID) return;
 
     const text = message.content.trim();
     if (!text) return;
 
-    // 觸發：
-    // - !p 物品
-    // - 或含「價格/市價/多少錢/查價/price」
-    // - 或 local 直接命中
     let query = text;
     if (text.toLowerCase().startsWith("!p")) query = text.slice(2).trim();
 
@@ -285,9 +244,7 @@ client.on("messageCreate", async (message) => {
     await message.channel.sendTyping();
 
     const resolved = await resolveItem(query);
-    if (!resolved) {
-      return message.reply(`❌ 找不到物品：「${query}」\n你可以貼更完整的名稱再試一次。`);
-    }
+    if (!resolved) return message.reply(`❌ 找不到物品：「${query}」\n貼更完整名稱再試一次。`);
 
     const worlds = getWorlds();
     const results = await Promise.allSettled(
@@ -298,11 +255,7 @@ client.on("messageCreate", async (message) => {
       })
     );
 
-    const cleaned = results.map((r, i) => {
-      if (r.status === "fulfilled") return r.value;
-      return { world: worlds[i], min: null };
-    });
-
+    const cleaned = results.map((r, i) => (r.status === "fulfilled" ? r.value : { world: worlds[i], min: null }));
     const available = cleaned.filter((x) => x.min != null).sort((a, b) => a.min - b.min);
     const best = available[0] || null;
 
