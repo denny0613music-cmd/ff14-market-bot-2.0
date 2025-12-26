@@ -16,7 +16,9 @@ import { Converter } from "opencc-js";
    基本設定
 ================================ */
 const PORT = process.env.PORT || 10000;
-const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
+const RAW_DISCORD_TOKEN = process.env.DISCORD_TOKEN;
+const DISCORD_TOKEN =
+  typeof RAW_DISCORD_TOKEN === "string" ? RAW_DISCORD_TOKEN.trim() : RAW_DISCORD_TOKEN;
 const PRICE_CHANNEL_ID = process.env.PRICE_CHANNEL_ID;
 
 const WORLD_LIST = (process.env.WORLD_LIST || "")
@@ -278,4 +280,50 @@ async function sendPrice(msg, itemId, itemName) {
 /* ===============================
    Login
 ================================ */
-client.login(DISCORD_TOKEN);
+(function login() {
+  const token = DISCORD_TOKEN;
+  const tokenType = typeof token;
+  const tokenLen = tokenType === "string" ? token.length : 0;
+  const hasWhitespace = tokenType === "string" ? /\s/.test(token) : false;
+  const startsWithBot = tokenType === "string" ? token.startsWith("Bot ") : false;
+
+  // ✅ 不印出 token 本體，只印「型態/長度/是否有空白」方便你在 Render log 直接定位
+  console.log(
+    `🔐 DISCORD_TOKEN type=${tokenType} length=${tokenLen} hasWhitespace=${hasWhitespace} startsWithBot=${startsWithBot}`
+  );
+
+  if (!token || tokenType !== "string") {
+    console.error(
+      "❌ DISCORD_TOKEN 不存在或不是字串。請到 Render → Environment 設定 Key=DISCORD_TOKEN 並重啟服務。"
+    );
+    return;
+  }
+
+  if (startsWithBot) {
+    console.error(
+      "❌ 你貼的是 'Bot xxxxx' 形式。client.login() 只要純 token，請把 'Bot ' 前綴移除。"
+    );
+    return;
+  }
+
+  if (hasWhitespace) {
+    console.error(
+      "❌ token 內含空白/換行。請在 Render 重新貼上（不要頭尾空白、不要換行）。"
+    );
+    return;
+  }
+
+  if (tokenLen < 40) {
+    console.error(
+      "❌ token 長度看起來太短，可能貼到 Client Secret 或貼錯欄位。請到 Discord Developer Portal → Bot → Reset Token 後複製新的 Bot Token。"
+    );
+    return;
+  }
+
+  client.login(token).catch((err) => {
+    console.error("❌ Discord login failed:", err);
+    console.error(
+      "👉 若你剛剛 Reset Token，請把 Render 的 DISCORD_TOKEN 換成新的並重啟。"
+    );
+  });
+})();
