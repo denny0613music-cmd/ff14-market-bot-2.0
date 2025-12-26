@@ -1,4 +1,4 @@
-// === index.js（完整覆蓋版｜修正模糊詞不綁死）===
+// === index.js（完整覆蓋版｜模糊詞不綁死＋最多 10 個選項）===
 
 import "dotenv/config";
 import fs from "fs";
@@ -135,33 +135,37 @@ client.on("messageCreate", async (msg) => {
     return;
   }
 
-  // 排序
+  // 相似度排序
   results.sort((a, b) => b.score - a.score);
 
-  // ✅ 只有「唯一結果」才自動用
+  // ✅ 唯一結果 → 直接查
   if (results.length === 1) {
     await sendPrice(msg, results[0].id, results[0].name);
     return;
   }
 
-  // 🔘 多結果 → 顯示選擇（manual 只是排序參考）
+  // 🔘 多結果 → 顯示最多 10 個（manual 只是排序提示）
   const top = results
     .sort((a, b) => (a.id === manualId ? -1 : 1))
-    .slice(0, 5);
+    .slice(0, 10);
 
-  const row = new ActionRowBuilder();
-  top.forEach((r, i) => {
-    row.addComponents(
-      new ButtonBuilder()
-        .setCustomId(`pick_${r.id}`)
-        .setLabel(`${i + 1}. ${r.name}`)
-        .setStyle(ButtonStyle.Primary)
-    );
-  });
+  const rows = [];
+  for (let i = 0; i < top.length; i += 5) {
+    const row = new ActionRowBuilder();
+    top.slice(i, i + 5).forEach((r, idx) => {
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`pick_${r.id}`)
+          .setLabel(`${i + idx + 1}. ${r.name}`)
+          .setStyle(ButtonStyle.Primary)
+      );
+    });
+    rows.push(row);
+  }
 
   const prompt = await msg.reply({
     content: `❓ 找到多個「${query}」相關物品，請選擇：`,
-    components: [row],
+    components: rows,
   });
 
   const collector = prompt.createMessageComponentCollector({ time: 60000 });
@@ -226,7 +230,10 @@ async function sendPrice(msg, itemId, itemName) {
   });
 
   const reply = await msg.reply({ embeds: [embed] });
-  setTimeout(() => reply.delete().catch(() => {}), AUTO_DELETE_MINUTES * 60 * 1000);
+  setTimeout(
+    () => reply.delete().catch(() => {}),
+    AUTO_DELETE_MINUTES * 60 * 1000
+  );
 }
 
 /* ===============================
