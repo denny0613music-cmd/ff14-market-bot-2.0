@@ -1,20 +1,18 @@
 {
   "name": "ff14-market-bot",
   "version": "1.0.0",
-  "description": "",
+  "description": "FF14 Taiwan (Materia) market helper bot",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build:items": "node build_items_zh_tw_full.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "module",
   "dependencies": {
     "discord.js": "^14.25.1",
     "dotenv": "^17.2.3",
     "node-fetch": "^3.3.2",
+    "opencc-js": "^1.0.5",
     "p-limit": "^7.2.0"
   }
 }
