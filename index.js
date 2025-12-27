@@ -329,6 +329,7 @@ async function cafemakerGetItemMeta(id) {
 
 /* ===============================
    救援搜尋（cafemaker）
+   【唯一改動】加入 SAFE_SUFFIXES 白名單後綴救援（不影響學習）
 ================================ */
 async function rescueSearch(originalQuery, mappedQuery) {
   const attempts = [];
@@ -360,6 +361,17 @@ async function rescueSearch(originalQuery, mappedQuery) {
   if (mappedQuery.length >= 4) pushAttempt(mappedQuery.slice(0, 3), "取前 3 字(映射後)");
   if (mappedQuery.length >= 3) pushAttempt(mappedQuery.slice(0, 2), "取前 2 字(映射後)");
 
+  // === 安全版白名單後綴救援（新增，不影響 term_map / manual）===
+  const SAFE_SUFFIXES = ["結晶片", "藏寶圖", "魔紋"];
+  for (const suf of SAFE_SUFFIXES) {
+    if (originalQuery.endsWith(suf)) {
+      pushAttempt(suf, `取後綴「${suf}」`);
+    }
+    if (mappedQuery.endsWith(suf)) {
+      pushAttempt(suf, `取後綴「${suf}」(映射後)`);
+    }
+  }
+
   for (const a of attempts) {
     try {
       const results = await cafemakerSearch(a.q, 20);
@@ -375,7 +387,6 @@ async function rescueSearch(originalQuery, mappedQuery) {
    大分類瀏覽：規則 / Session
 ================================ */
 const CATEGORY_SEEDS = {
-  // 你可以自己再加：只要加 seed 關鍵字就能抓到更多候選
   地圖: ["藏寶圖", "陳舊的藏寶圖", "魔紋", "龍皮", "地圖"],
   礦石: ["礦", "原礦", "礦石", "礦砂", "碎晶"],
   木材: ["原木", "木材", "木", "木板"],
@@ -387,17 +398,11 @@ const CATEGORY_SEEDS = {
 function normalizeCategoryInput(raw) {
   let s = (raw || "").trim();
   if (!s) return null;
-
-  // (地圖) 格式
   const m = s.match(/^\((.+)\)$/);
   if (m && m[1]) s = m[1].trim();
-
-  // "分類 xxx" 格式
   if (s.startsWith(CATEGORY_TRIGGER_PREFIX)) {
     s = s.slice(CATEGORY_TRIGGER_PREFIX.length).trim();
   }
-
-  // 允許直接打「地圖」「礦石」這種
   return s || null;
 }
 
@@ -406,17 +411,13 @@ function isCategoryBrowse(raw) {
   if (!s) return false;
   if (s.startsWith(CATEGORY_TRIGGER_PREFIX)) return true;
   if (/^\(.+\)$/.test(s)) return true;
-
-  // 直接打大分類字（只對已定義 seeds 的 key 生效）
   return Object.prototype.hasOwnProperty.call(CATEGORY_SEEDS, s);
 }
 
-// 地圖的子分類（優先用名稱判斷，讓你看得懂）
 function mapSubCategoryName(itemName) {
   const name = String(itemName || "");
   const g = name.match(/G\s*(\d+)/i) || name.match(/Ｇ\s*(\d+)/);
   if (g && g[1]) return `G${g[1]}`;
-
   if (name.includes("魔紋")) return "魔紋";
   if (name.includes("龍皮")) return "龍皮";
   if (name.includes("陳舊")) return "陳舊";
@@ -429,10 +430,8 @@ function makeSessionId() {
 }
 
 const UI_SESSIONS = new Map();
-// sessionId -> { userId, keyword, view, cats:[{key,label,items:[] }], catPage, itemPage, currentCatKey }
 function putSession(sid, obj) {
   UI_SESSIONS.set(sid, { ...obj, updatedAt: Date.now() });
-  // 簡單清理：避免 Map 無限長
   if (UI_SESSIONS.size > 200) {
     const entries = [...UI_SESSIONS.entries()].sort((a, b) => (a[1].updatedAt || 0) - (b[1].updatedAt || 0));
     for (let i = 0; i < 50; i++) UI_SESSIONS.delete(entries[i][0]);
@@ -462,7 +461,7 @@ function buildPickRowsFromList(list, sessionId, prefix, page, pageSize) {
     const row = new ActionRowBuilder();
     items.slice(i, i + 5).forEach((it, idx) => {
       const label = `${i + idx + 1 + p * pageSize}. ${it.label}`;
-      const idPart = it.key; // key 或 itemId
+      const idPart = it.key;
       row.addComponents(
         new ButtonBuilder()
           .setCustomId(`${prefix}_${sessionId}_${idPart}`)
@@ -473,7 +472,6 @@ function buildPickRowsFromList(list, sessionId, prefix, page, pageSize) {
     rows.push(row);
   }
 
-  // 導航列（上一頁/下一頁/返回）
   const maxPage = Math.max(0, Math.ceil(total / pageSize) - 1);
   const nav = new ActionRowBuilder()
     .addComponents(
@@ -501,7 +499,6 @@ async function buildBrowseCategories(keyword) {
   const candidates = [];
   const seen = new Set();
 
-  // 1) 先用 search 撈一大批候選
   for (const seed of seeds) {
     try {
       const rs = await cafemakerSearch(seed, CATEGORY_SEARCH_LIMIT);
@@ -511,14 +508,11 @@ async function buildBrowseCategories(keyword) {
         seen.add(r.id);
         candidates.push({ id: r.id, name: r.name });
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   if (!candidates.length) return { cats: [], items: [] };
 
-  // 2) 再取 meta（ItemSearchCategory / ItemUICategory）
   const limit = pLimit(CATEGORY_META_CONCURRENCY);
   const metas = [];
   await Promise.allSettled(
@@ -527,22 +521,15 @@ async function buildBrowseCategories(keyword) {
         try {
           const m = await cafemakerGetItemMeta(c.id);
           if (m?.id) metas.push(m);
-        } catch {
-          // ignore meta failures
-        }
+        } catch {}
       })
     )
   );
 
-  // 3) 分類規則：
-  // - 地圖：用名稱切 Gx / 魔紋 / 陳舊 …
-  // - 其他：優先用 ItemSearchCategory，不行就用 ItemUICategory，不行就「其他」
-  const group = new Map(); // key -> { label, items:[{id,name}] }
-
+  const group = new Map();
   for (const m of metas) {
-    let catKey = "";
     let label = "";
-
+    let catKey = "";
     if (key === "地圖") {
       label = mapSubCategoryName(m.name);
       catKey = label;
@@ -550,12 +537,10 @@ async function buildBrowseCategories(keyword) {
       label = m.itemSearchCategory || m.itemUiCategory || "其他";
       catKey = label;
     }
-
     if (!group.has(catKey)) group.set(catKey, { label, items: [] });
     group.get(catKey).items.push({ id: m.id, name: m.name });
   }
 
-  // 4) 轉成陣列 + 排序（數量多的在前）
   const cats = [...group.entries()]
     .map(([k, v]) => ({
       key: k,
@@ -593,20 +578,13 @@ client.on("messageCreate", async (msg) => {
   const raw = msg.content.trim();
   if (!raw) return;
 
-  // ==========================
-  // 0) 大分類瀏覽入口
-  // ==========================
   if (isCategoryBrowse(raw)) {
     const keyword = normalizeCategoryInput(raw);
     if (!keyword) return;
-
     await handleCategoryBrowse(msg, keyword);
     return;
   }
 
-  // ==========================
-  // 1) 原本的「單品查價」流程
-  // ==========================
   const query = raw;
   const queryLen = [...query].length;
 
@@ -640,7 +618,6 @@ client.on("messageCreate", async (msg) => {
   }
 
   if (results.length === 1) {
-    // term_map 自動學習（保守）
     if (rescueInfo && rescueInfo.usedQuery && rescueInfo.usedQuery !== query) {
       if (queryLen >= TERM_MAP_LEARN_MIN_LEN) {
         const tm = loadTermMap();
@@ -649,7 +626,6 @@ client.on("messageCreate", async (msg) => {
       }
     }
 
-    // manual 分級學習：短詞不記，長詞記
     if (queryLen >= MANUAL_LEARN_MIN_LEN) {
       const m = loadManual();
       m[query] = results[0].id;
@@ -701,14 +677,12 @@ client.on("messageCreate", async (msg) => {
     const picked = top.find((t) => t.id === pickedId);
     if (!picked) return;
 
-    // manual 分級學習
     if (queryLen >= MANUAL_LEARN_MIN_LEN) {
       const m = loadManual();
       m[query] = pickedId;
       saveManual(m);
     }
 
-    // term_map 學習（保守）
     if (rescueInfo && rescueInfo.usedQuery && rescueInfo.usedQuery !== query) {
       if (queryLen >= TERM_MAP_LEARN_MIN_LEN) {
         const tm = loadTermMap();
@@ -728,7 +702,6 @@ client.on("messageCreate", async (msg) => {
 async function handleCategoryBrowse(msg, keyword) {
   const sid = makeSessionId();
 
-  // 先回覆「載入中」
   const prompt = await msg.reply({
     content: `🗂️ 正在整理「${keyword}」的分類…（如果很多物品會稍慢一點點）`,
     components: [],
@@ -736,7 +709,7 @@ async function handleCategoryBrowse(msg, keyword) {
 
   const built = await buildBrowseCategories(keyword);
   if (!built.cats.length) {
-    await prompt.edit(`❌ 我找不到「${keyword}」的分類資料。\n💡 你可以試試看：\n- (地圖)\n- 分類 礦石\n- 直接輸入更精準的關鍵字`);
+    await prompt.edit(`❌ 我找不到「${keyword}」的分類資料。`);
     return;
   }
 
@@ -750,7 +723,6 @@ async function handleCategoryBrowse(msg, keyword) {
     currentCatKey: null,
   });
 
-  // 顯示子分類清單
   await renderCategoryView(prompt, sid);
 
   const collector = prompt.createMessageComponentCollector({ time: 120000 });
@@ -767,7 +739,6 @@ async function handleCategoryBrowse(msg, keyword) {
     }
 
     try {
-      // 分類點選
       if (i.customId.startsWith(`catpick_${sid}_`)) {
         const catKey = i.customId.replace(`catpick_${sid}_`, "");
         s.view = "items";
@@ -779,7 +750,6 @@ async function handleCategoryBrowse(msg, keyword) {
         return;
       }
 
-      // 物品點選
       if (i.customId.startsWith(`itempick_${sid}_`)) {
         const itemId = Number(i.customId.replace(`itempick_${sid}_`, ""));
         const cat = s.cats.find((c) => c.key === s.currentCatKey);
@@ -790,7 +760,6 @@ async function handleCategoryBrowse(msg, keyword) {
         return;
       }
 
-      // 翻頁
       if (i.customId === `nav_${sid}_prev`) {
         await i.deferUpdate();
         if (s.view === "cats") s.catPage = Math.max(0, (s.catPage || 0) - 1);
@@ -810,7 +779,6 @@ async function handleCategoryBrowse(msg, keyword) {
         return;
       }
 
-      // 返回分類
       if (i.customId === `back_${sid}`) {
         await i.deferUpdate();
         s.view = "cats";
@@ -819,25 +787,19 @@ async function handleCategoryBrowse(msg, keyword) {
         await renderCategoryView(prompt, sid);
         return;
       }
-    } catch {
-      // ignore UI errors
-    }
+    } catch {}
   });
 
   collector.on("end", async () => {
-    // 時間到，把按鈕關掉
     try {
       const s = getSession(sid);
       if (s) delSession(sid);
       await prompt.edit({ components: [] });
-    } catch {
-      // ignore
-    }
+    } catch {}
   });
 }
 
 function parseSessionId(customId) {
-  // catpick_<sid>_xxx / itempick_<sid>_xxx / nav_<sid>_prev / back_<sid>
   const parts = String(customId || "").split("_");
   if (parts.length < 2) return null;
   if (parts[0] === "catpick") return parts[1];
@@ -854,7 +816,6 @@ async function renderCategoryView(promptMsg, sid) {
   const list = s.cats.map((c) => ({ key: c.key, label: c.label }));
   const { rows, page, maxPage } = buildPickRowsFromList(list, sid, "catpick", s.catPage || 0, CATEGORY_PAGE_SIZE);
 
-  // 增加「提示列」
   const hintRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`noop_${sid}`)
@@ -887,7 +848,6 @@ async function renderItemsView(promptMsg, sid) {
   const list = cat.items.map((it) => ({ key: String(it.id), label: it.name }));
   const { rows, page, maxPage } = buildPickRowsFromList(list, sid, "itempick", s.itemPage || 0, ITEM_PAGE_SIZE);
 
-  // 加一個返回鍵
   const backRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`back_${sid}`).setLabel("↩️ 返回分類").setStyle(ButtonStyle.Secondary)
   );
@@ -945,10 +905,9 @@ async function sendPrice(msg, itemId, itemName) {
   valid.sort((a, b) => a.price - b.price);
   const best = valid[0];
 
-  // ---- 表格欄寬（固定欄位 + 對齊）----
   const worldW = Math.max(6, ...prices.map((p) => strWidth(p.world || "")), 6);
-  const priceW = 10; // 例如 1,200,000
-  const deltaW = 6; // 例如 +12%
+  const priceW = 10;
+  const deltaW = 6;
   const avgW = 10;
 
   const header =
@@ -975,7 +934,6 @@ async function sendPrice(msg, itemId, itemName) {
 
   const table = ["```", header, sep, ...rows, "```"].join("\n");
 
-  // 吐槽獨立一行、整齊
   const roast = moodFromDelta(best.deltaPct);
   const roastLine = `💬 評語：${roast}`;
 
