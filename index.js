@@ -1048,10 +1048,28 @@ async function sendPrice(msg, itemId, itemName) {
   };
 
   const buildTable = (prices, bestWorld) => {
-    const worldW = Math.max(6, ...prices.map((p) => strWidth(p.world || "")), 6);
-    const priceW = 10;
-    const deltaW = 6;
-    const avgW = 10;
+    // ✅ 表格內「永遠不歪」：
+    // - code block 內完全不放 emoji（emoji 在 monospace 也可能有寬度差）
+    // - 最低價伺服器用 ASCII 的 * 標記（穩定）
+    const markWorld = (w) => (w === bestWorld ? `${w}*` : `${w} `);
+
+    const worldDisplays = prices.map((p) => markWorld(p.world || ""));
+    const worldW = Math.max(6, ...worldDisplays.map((s) => strWidth(s)));
+
+    const priceTexts = prices.map((p) =>
+      p.price === null ? "—" : fmtPriceCompact(p.price)
+    );
+    const avgTexts = prices.map((p) =>
+      p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold)
+    );
+    const deltaTexts = prices.map((p) =>
+      p.deltaPct === null ? "—" : deltaBadge(p.deltaPct)
+    );
+
+    // 欄位寬度用「實際資料」計算，避免某些數字較長導致看起來歪
+    const priceW = Math.max(4, ...priceTexts.map((s) => strWidth(s)));
+    const avgW = Math.max(4, ...avgTexts.map((s) => strWidth(s)));
+    const deltaW = Math.max(4, ...deltaTexts.map((s) => strWidth(s)));
 
     const header =
       `${padRight("伺服器", worldW)}  ` +
@@ -1061,22 +1079,21 @@ async function sendPrice(msg, itemId, itemName) {
 
     const sep = "-".repeat(strWidth(header));
 
-    const rows = prices.map((p) => {
-      const crown = p.world === bestWorld ? "🏆" : "  ";
-      const priceText = p.price === null ? "—" : fmtPriceCompact(p.price);
-      const avgText = p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold);
-      const dText = p.deltaPct === null ? "—" : deltaBadge(p.deltaPct);
+    const rows = prices.map((p, idx) => {
+      const worldText = worldDisplays[idx];
+      const priceText = priceTexts[idx];
+      const avgText = avgTexts[idx];
+      const dText = deltaTexts[idx];
 
       return (
-        `${crown}${padRight(p.world, worldW)}  ` +
+        `${padRight(worldText, worldW)}  ` +
         `${padLeft(priceText, priceW)}  ` +
         `${padLeft(dText, deltaW)}  ` +
         `${padLeft(avgText, avgW)}`
       );
     });
 
-    return ["```", header, sep, ...rows, "```"].join("
-");
+    return ["```", header, sep, ...rows, "```"].join("\n");
   };
 
   const pricesNQ = [];
@@ -1161,6 +1178,9 @@ async function sendPrice(msg, itemId, itemName) {
 
   lines.push(""); // spacer
 
+  // 表格標記說明（表格內不放 emoji，避免寬度影響對齊）
+  if (nqTable || hqTable) lines.push("＊ = 最低價伺服器");
+
   if (nqTable) {
     lines.push("【NQ】");
     lines.push(nqTable);
@@ -1172,8 +1192,7 @@ async function sendPrice(msg, itemId, itemName) {
 
   const embed = new EmbedBuilder()
     .setTitle(`📦 ${itemName}`)
-    .setDescription(lines.join(`
-`));
+    .setDescription(lines.join("\n"));
 
   const reply = await msg.reply({ embeds: [embed] });
   setTimeout(
