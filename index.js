@@ -1075,8 +1075,7 @@ async function sendPrice(msg, itemId, itemName) {
       );
     });
 
-    return ["```", header, sep, ...rows, "```"].join("
-");
+    return ["```", header, sep, ...rows, "```"].join("\n");
   };
 
   const pricesNQ = [];
@@ -1172,8 +1171,7 @@ async function sendPrice(msg, itemId, itemName) {
 
   const embed = new EmbedBuilder()
     .setTitle(`📦 ${itemName}`)
-    .setDescription(lines.join("
-"));
+    .setDescription(lines.join("\n"));
 
   const reply = await msg.reply({ embeds: [embed] });
   setTimeout(
