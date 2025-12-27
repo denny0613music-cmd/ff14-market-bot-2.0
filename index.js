@@ -1051,10 +1051,11 @@ async function sendPrice(msg, itemId, itemName) {
     // ✅ 表格內「永遠不歪」：
     // - code block 內完全不放 emoji（emoji 在 monospace 也可能有寬度差）
     // - 最低價伺服器用 ASCII 的 * 標記（穩定）
-    const markWorld = (w) => (w === bestWorld ? `${w}*` : `${w} `);
+    const markerToken = ":moneybag:";
+    const markerTexts = prices.map((p) => (p.world === bestWorld ? markerToken : ""));
+    const markerW = Math.max(strWidth(markerToken), 1);
 
-    const worldDisplays = prices.map((p) => markWorld(p.world || ""));
-    const worldW = Math.max(6, ...worldDisplays.map((s) => strWidth(s)));
+    const worldW = Math.max(6, ...prices.map((p) => strWidth(p.world || "")));
 
     const priceTexts = prices.map((p) =>
       p.price === null ? "—" : fmtPriceCompact(p.price)
@@ -1072,6 +1073,7 @@ async function sendPrice(msg, itemId, itemName) {
     const deltaW = Math.max(4, ...deltaTexts.map((s) => strWidth(s)));
 
     const header =
+      `${padRight("", markerW)}  ` +
       `${padRight("伺服器", worldW)}  ` +
       `${padLeft("最低", priceW)}  ` +
       `${padLeft("差異", deltaW)}  ` +
@@ -1080,12 +1082,14 @@ async function sendPrice(msg, itemId, itemName) {
     const sep = "-".repeat(strWidth(header));
 
     const rows = prices.map((p, idx) => {
-      const worldText = worldDisplays[idx];
+      const markerText = markerTexts[idx];
+      const worldText = p.world || "";
       const priceText = priceTexts[idx];
       const avgText = avgTexts[idx];
       const dText = deltaTexts[idx];
 
       return (
+        `${padRight(markerText, markerW)}  ` +
         `${padRight(worldText, worldW)}  ` +
         `${padLeft(priceText, priceW)}  ` +
         `${padLeft(dText, deltaW)}  ` +
