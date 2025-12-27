@@ -426,12 +426,9 @@ function moodFromDelta(deltaPct) {
    表格排版工具（等寬 code block）
 ================================ */
 function strWidth(s) {
-  // 粗略：ASCII=1，中文=2；但「—」這種破折號在 Discord 顯示通常只佔 1 格，特別處理避免欄位飄
+  // 粗略：ASCII=1，其他=2（中文寬度）
   let w = 0;
-  for (const ch of String(s)) {
-    if (ch === "—" || ch === "－" || ch === "–") { w += 1; continue; }
-    w += ch.charCodeAt(0) <= 0x7f ? 1 : 2;
-  }
+  for (const ch of String(s)) w += ch.charCodeAt(0) <= 0x7f ? 1 : 2;
   return w;
 }
 
@@ -1051,40 +1048,36 @@ async function sendPrice(msg, itemId, itemName) {
   };
 
   const buildTable = (prices, bestWorld) => {
-    // ✅ 表格永遠對齊：最低價用「獨立標記欄」放 💰（不塞進伺服器欄）
-    const markHeader = "標記";
-    const markW = Math.max(strWidth(markHeader), 2); // 💰 約 2 格，標題是 4 格
-    const worldHeader = "伺服器";
-    const priceHeader = "最低";
-    const deltaHeader = "差異";
-    const avgHeader = "均價";
+    // ✅ 完全避開 emoji 寬度問題：用純 ASCII 的 * 當冠軍標記
+    // - 最低價伺服器：世界名後面加 *
+    // - 其他：世界名後面補一格空白，視覺上同欄寬
+    const markWorld = (w) => (w === bestWorld ? `${w}*` : `${w} `);
 
-    const priceTextOf = (p) => (p.price === null ? "—" : fmtPriceCompact(p.price));
-    const avgTextOf = (p) => (p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold));
-    const deltaTextOf = (p) => (p.deltaPct === null ? "—" : deltaBadge(p.deltaPct));
-
-    const worldW = Math.max(strWidth(worldHeader), ...prices.map((p) => strWidth(p.world || "")));
-    const priceW = Math.max(strWidth(priceHeader), ...prices.map((p) => strWidth(priceTextOf(p))));
-    const deltaW = Math.max(strWidth(deltaHeader), ...prices.map((p) => strWidth(deltaTextOf(p))));
-    const avgW = Math.max(strWidth(avgHeader), ...prices.map((p) => strWidth(avgTextOf(p))));
+    const worldDisplays = prices.map((p) => markWorld(p.world || ""));
+    const worldW = Math.max(6, ...worldDisplays.map((s) => strWidth(s)), 6);
+    const priceW = 10;
+    const deltaW = 6;
+    const avgW = 10;
 
     const header =
-      `${padRight(markHeader, markW)}  ` +
-      `${padRight(worldHeader, worldW)}  ` +
-      `${padLeft(priceHeader, priceW)}  ` +
-      `${padLeft(deltaHeader, deltaW)}  ` +
-      `${padLeft(avgHeader, avgW)}`;
+      `${padRight("伺服器", worldW)}  ` +
+      `${padLeft("最低", priceW)}  ` +
+      `${padLeft("差異", deltaW)}  ` +
+      `${padLeft("均價", avgW)}`;
 
     const sep = "-".repeat(strWidth(header));
 
     const rows = prices.map((p) => {
-      const mark = p.world === bestWorld ? "💰" : "";
+      const worldText = markWorld(p.world || "");
+      const priceText = p.price === null ? "—" : fmtPriceCompact(p.price);
+      const avgText = p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold);
+      const dText = p.deltaPct === null ? "—" : deltaBadge(p.deltaPct);
+
       return (
-        `${padRight(mark, markW)}  ` +
-        `${padRight(p.world, worldW)}  ` +
-        `${padLeft(priceTextOf(p), priceW)}  ` +
-        `${padLeft(deltaTextOf(p), deltaW)}  ` +
-        `${padLeft(avgTextOf(p), avgW)}`
+        `${padRight(worldText, worldW)}  ` +
+        `${padLeft(priceText, priceW)}  ` +
+        `${padLeft(dText, deltaW)}  ` +
+        `${padLeft(avgText, avgW)}`
       );
     });
 
