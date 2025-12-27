@@ -1048,32 +1048,20 @@ async function sendPrice(msg, itemId, itemName) {
   };
 
   const buildTable = (prices, bestWorld) => {
-    // ✅ 表格內「永遠不歪」：
-    // - code block 內完全不放 emoji（emoji 在 monospace 也可能有寬度差）
-    // - 最低價伺服器用 ASCII 的 * 標記（穩定）
-    const markerToken = ":moneybag:";
-    const markerTexts = prices.map((p) => (p.world === bestWorld ? markerToken : ""));
-    const markerW = Math.max(strWidth(markerToken), 1);
+    // ✅ 永遠不歪：把「最低價標記」做成獨立欄位，不要塞進伺服器名稱欄位
+    // - 表格內使用 :moneybag:（純文字，寬度固定；不吃 emoji 圖示寬度影響）
+    // - 只有最低價那行顯示標記，其餘留空，但一樣佔欄寬
+    const MARK = ":moneybag:";
+    const markText = (w) => (bestWorld && w === bestWorld ? MARK : "");
 
-    const worldW = Math.max(6, ...prices.map((p) => strWidth(p.world || "")));
-
-    const priceTexts = prices.map((p) =>
-      p.price === null ? "—" : fmtPriceCompact(p.price)
-    );
-    const avgTexts = prices.map((p) =>
-      p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold)
-    );
-    const deltaTexts = prices.map((p) =>
-      p.deltaPct === null ? "—" : deltaBadge(p.deltaPct)
-    );
-
-    // 欄位寬度用「實際資料」計算，避免某些數字較長導致看起來歪
-    const priceW = Math.max(4, ...priceTexts.map((s) => strWidth(s)));
-    const avgW = Math.max(4, ...avgTexts.map((s) => strWidth(s)));
-    const deltaW = Math.max(4, ...deltaTexts.map((s) => strWidth(s)));
+    const markW = Math.max(strWidth("標記"), strWidth(MARK));
+    const worldW = Math.max(6, ...prices.map((p) => strWidth(p.world || "")), 6);
+    const priceW = 10;
+    const deltaW = 6;
+    const avgW = 10;
 
     const header =
-      `${padRight("", markerW)}  ` +
+      `${padRight("標記", markW)}  ` +
       `${padRight("伺服器", worldW)}  ` +
       `${padLeft("最低", priceW)}  ` +
       `${padLeft("差異", deltaW)}  ` +
@@ -1081,15 +1069,16 @@ async function sendPrice(msg, itemId, itemName) {
 
     const sep = "-".repeat(strWidth(header));
 
-    const rows = prices.map((p, idx) => {
-      const markerText = markerTexts[idx];
+    const rows = prices.map((p) => {
       const worldText = p.world || "";
-      const priceText = priceTexts[idx];
-      const avgText = avgTexts[idx];
-      const dText = deltaTexts[idx];
+      const mark = markText(worldText);
+
+      const priceText = p.price === null ? "—" : fmtPriceCompact(p.price);
+      const avgText = p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold);
+      const dText = p.deltaPct === null ? "—" : deltaBadge(p.deltaPct);
 
       return (
-        `${padRight(markerText, markerW)}  ` +
+        `${padRight(mark, markW)}  ` +
         `${padRight(worldText, worldW)}  ` +
         `${padLeft(priceText, priceW)}  ` +
         `${padLeft(dText, deltaW)}  ` +
@@ -1181,9 +1170,6 @@ async function sendPrice(msg, itemId, itemName) {
   }
 
   lines.push(""); // spacer
-
-  // 表格標記說明（表格內不放 emoji，避免寬度影響對齊）
-  if (nqTable || hqTable) lines.push("＊ = 最低價伺服器");
 
   if (nqTable) {
     lines.push("【NQ】");
