@@ -1188,7 +1188,7 @@ if (bestHQ) {
 
 const embed = new EmbedBuilder()
   .setTitle(`📦 ${itemName}`)
-  .setDescription(lines.join("
+  .setDescription(lines.join("\n"));
 "));
 // ========= UI ONLY：結束 =========
 
