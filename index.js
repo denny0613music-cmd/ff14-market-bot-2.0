@@ -426,7 +426,7 @@ function moodFromDelta(deltaPct) {
    表格排版工具（等寬 code block）
 ================================ */
 function strWidth(s) {
-  // 粗略但穩定：ASCII=1，中文/多數全形=2；另外把常見的「—」當作 1（Discord 常以 1 格呈現）
+  // 粗略：ASCII=1，CJK=2；特例：— 視為 1（Discord 顯示通常是 1 格）
   let w = 0;
   for (const ch of String(s)) {
     if (ch === "—") {
@@ -451,6 +451,9 @@ function padLeft(s, width) {
   if (w >= width) return s;
   return " ".repeat(width - w) + s;
 }
+
+// ✅ Newline helper（避免 join("\n") 被編輯器斷行弄爆）
+const NL = String.fromCharCode(10);
 
 /* ===============================
    CafeMaker：搜尋 / 物品資訊
@@ -1053,53 +1056,51 @@ async function sendPrice(msg, itemId, itemName) {
     return Math.min(...nums);
   };
 
-const buildTable = (prices, bestWorld) => {
-  // ✅ 版本回歸：用 🏆 標記最低價伺服器（不新增欄位，維持原表格風格）
-  // - 為了永遠對齊：前綴固定寬度（"🏆 " 或 "   "）
-  const markWorld = (w) => (w === bestWorld ? `🏆 ${w}` : `   ${w}`);
+  const buildTable = (prices, bestWorld) => {
+    // ✅ 你要的版本：用 🏆 標記最低價伺服器（其他行用同寬空白補齊，確保對齊）
+    const prefix = (w) => (w === bestWorld ? "🏆 " : "  ");
 
-  const worldDisplays = prices.map((p) => markWorld(p.world || ""));
-  const worldW = Math.max(6, ...worldDisplays.map((s) => strWidth(s)), 6);
+    const worldW = Math.max(6, ...prices.map((p) => strWidth(p.world || "")), 6);
 
-  const priceTexts = prices.map((p) =>
-    p.price === null ? "—" : fmtPriceCompact(p.price)
-  );
-  const avgTexts = prices.map((p) =>
-    p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold)
-  );
-  const deltaTexts = prices.map((p) =>
-    p.deltaPct === null ? "—" : deltaBadge(p.deltaPct)
-  );
-
-  const priceW = Math.max(4, ...priceTexts.map(strWidth));
-  const deltaW = Math.max(4, ...deltaTexts.map(strWidth));
-  const avgW = Math.max(4, ...avgTexts.map(strWidth));
-
-  const header =
-    `${padRight("伺服器", worldW)}  ` +
-    `${padLeft("最低", priceW)}  ` +
-    `${padLeft("差異", deltaW)}  ` +
-    `${padLeft("均價", avgW)}`;
-
-  const sep = "-".repeat(strWidth(header));
-
-  const rows = prices.map((p, idx) => {
-    const worldText = markWorld(p.world || "");
-    const priceText = priceTexts[idx];
-    const dText = deltaTexts[idx];
-    const avgText = avgTexts[idx];
-
-    return (
-      `${padRight(worldText, worldW)}  ` +
-      `${padLeft(priceText, priceW)}  ` +
-      `${padLeft(dText, deltaW)}  ` +
-      `${padLeft(avgText, avgW)}`
+    // 數字欄位寬度依資料動態算（包含逗號、—、百分比），讓欄位更穩定對齊
+    const priceTexts = prices.map((p) =>
+      p.price === null ? "—" : fmtPriceCompact(p.price)
     );
-  });
+    const avgTexts = prices.map((p) =>
+      p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold)
+    );
+    const deltaTexts = prices.map((p) =>
+      p.deltaPct === null ? "—" : deltaBadge(p.deltaPct)
+    );
 
-  return ["```", header, sep, ...rows, "```"].join("
-");
-};
+    const priceW = Math.max(4, ...priceTexts.map((s) => strWidth(s)));
+    const deltaW = Math.max(4, ...deltaTexts.map((s) => strWidth(s)));
+    const avgW = Math.max(4, ...avgTexts.map((s) => strWidth(s)));
+
+    const header =
+      `${padRight("伺服器", worldW)}  ` +
+      `${padLeft("最低", priceW)}  ` +
+      `${padLeft("差異", deltaW)}  ` +
+      `${padLeft("均價", avgW)}`;
+
+    const sep = "-".repeat(strWidth(header) + 2); // +2 給前綴空間
+
+    const rows = prices.map((p, idx) => {
+      const worldText = p.world || "";
+      const priceText = priceTexts[idx];
+      const avgText = avgTexts[idx];
+      const dText = deltaTexts[idx];
+
+      return (
+        `${prefix(p.world)}${padRight(worldText, worldW)}  ` +
+        `${padLeft(priceText, priceW)}  ` +
+        `${padLeft(dText, deltaW)}  ` +
+        `${padLeft(avgText, avgW)}`
+      );
+    });
+
+    return ["```", header, sep, ...rows, "```"].join(NL);
+  };
 
   const pricesNQ = [];
   const pricesHQ = [];
@@ -1194,7 +1195,7 @@ const buildTable = (prices, bestWorld) => {
 
   const embed = new EmbedBuilder()
     .setTitle(`📦 ${itemName}`)
-    .setDescription(lines.join("\n"));
+    .setDescription(lines.join(NL));
 
   const reply = await msg.reply({ embeds: [embed] });
   setTimeout(
