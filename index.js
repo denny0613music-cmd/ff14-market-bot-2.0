@@ -188,11 +188,32 @@ function deltaBadge(deltaPct) {
 }
 
 function moodFromDelta(deltaPct) {
+  // B（巴哈常見）+ C（重度嘴砲但不罵人）混合；每個區間隨機 >= 20 條
   if (deltaPct === null) {
     const pool = [
-      "📭 成交資料不足：我只能用掛單猜…（別太信我）",
-      "🧐 成交太少：行情不好判斷欸",
-      "😴 成交不夠：我先不亂嘴（但我很想）",
+      "📭 成交資料少到像沒開市場板：我只能用掛單通靈一下。",
+      "📭 沒什麼成交紀錄：這東西是倉庫守門員嗎？",
+      "📭 成交太稀薄：我現在的信心跟你抽極神坐騎一樣薄。",
+      "📭 幾乎沒成交：利姆薩廣場都比這裡熱鬧。",
+      "📭 成交不足：我只能用「體感」亂猜，別拿我當投資顧問。",
+      "📭 歷史少：像是沒人練這職業一樣，價格很難講。",
+      "📭 成交資料不足：這波我先不嘴商人，怕是根本沒人賣。",
+      "📭 市場太冷：冷到以為在伊修加德外面吹風。",
+      "📭 沒成交：可能有人囤著等改版，或大家都懶得上架。",
+      "📭 成交稀有：我懷疑這是收藏品不是商品。",
+      "📭 沒什麼人買：這就是傳說中的「看得到買不到」。",
+      "📭 歷史很少：你問我行情？我問誰？問旅神嗎。",
+      "📭 成交資料不足：先當作沒有均價，別被假象帶走。",
+      "📭 成交太少：我只能看掛單，像看天氣預報猜暴雨。",
+      "📭 沒成交：可能都被 FC 內部消化了。",
+      "📭 成交資料不足：我現在是「猜價精靈」，不保證準。",
+      "📭 歷史不足：像深層迷宮掉落一樣，紀錄少得可憐。",
+      "📭 成交不足：這不是行情，是傳說。",
+      "📭 成交太少：建議多看幾個伺服器再決定。",
+      "📭 幾乎沒成交：我只能說…別衝動，先看一下別人怎麼掛。",
+      "📭 成交不足：這波嘴不出來，但我手很癢。",
+      "📭 沒成交：你要嘛撿漏撿到寶，要嘛踩雷踩到哭。",
+      "📭 成交稀少：這市場像是被沉默術了。",
     ];
     return pool[Math.floor(Math.random() * pool.length)];
   }
@@ -201,62 +222,202 @@ function moodFromDelta(deltaPct) {
 
   if (d <= -30) {
     const pool = [
-      `🟢 低於均價 ${Math.abs(d).toFixed(0)}%：撿到寶啦，快撿！😏`,
-      `🟢 低 ${Math.abs(d).toFixed(0)}%：這不是折扣，這是禮物 🎁`,
-      `🟢 便宜到離譜（-${Math.abs(d).toFixed(0)}%）：商人睡著了？`,
+      `🟢 低於均價 ${Math.abs(d).toFixed(0)}%：這不是便宜，是「開局送禮」🎁`,
+      `🟢 低 ${Math.abs(d).toFixed(0)}%：商人是不是去打絕本忘了改價？`,
+      `🟢 便宜到 ${Math.abs(d).toFixed(0)}%：掃貨仔要來了，你還不快點。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：這價格會被秒掃，現在還在？怪怪的喔。`,
+      `🟢 低於均價 ${Math.abs(d).toFixed(0)}%：利姆薩商人看到會心痛。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：你不買，五分鐘後一定有人買。`,
+      `🟢 便宜 ${Math.abs(d).toFixed(0)}%：這是撿漏，不是購物。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：像打副本撿到坐騎一樣爽。`,
+      `🟢 低 ${Math.abs(d).toFixed(0)}%：商人：我只是想清倉啦（信你才怪）`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：這價位買下去，心情會變好。`,
+      `🟢 低於均價 ${Math.abs(d).toFixed(0)}%：今天你就是市場板 MVP。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：這波可以，屬於「不買會後悔」那種。`,
+      `🟢 便宜到 ${Math.abs(d).toFixed(0)}%：你現在是在撿人家失誤。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：快買，別讓掃地機器人看到。`,
+      `🟢 低 ${Math.abs(d).toFixed(0)}%：價格甜到像吃到 HQ 料理。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：這個價你敢不買？我替你買。`,
+      `🟢 低於均價 ${Math.abs(d).toFixed(0)}%：這叫「佛心」，真的佛。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：感覺像有人掛錯一個 0。`,
+      `🟢 便宜 ${Math.abs(d).toFixed(0)}%：這價格能寫進巴哈精華。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：衝啦！這波不衝你要等下次改版？`,
+      `🟢 低 ${Math.abs(d).toFixed(0)}%：這不是折扣，這是慈善活動。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：買完記得低調，不然會被問在哪看到。`,
+      `🟢 低於均價 ${Math.abs(d).toFixed(0)}%：你今天運氣比抽卡還好。`,
     ];
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
   if (d <= -15) {
     const pool = [
-      `🟢 低於均價 ${Math.abs(d).toFixed(0)}%：可以買，真的可以 😌`,
-      `🟢 便宜 ${Math.abs(d).toFixed(0)}%：錢包表示 YES ✅`,
-      `🟢 比均價低 ${Math.abs(d).toFixed(0)}%：這價位很甜`,
+      `🟢 低於均價 ${Math.abs(d).toFixed(0)}%：這價位很舒服，買了不心痛。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：可以買，屬於「不盤」的範圍。`,
+      `🟢 便宜 ${Math.abs(d).toFixed(0)}%：錢包點頭了 ✅`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：這波小撿漏，舒服。`,
+      `🟢 低於均價 ${Math.abs(d).toFixed(0)}%：商人還沒起床，你先。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：這價位買下去，心情會像拿到周任獎勵。`,
+      `🟢 便宜 ${Math.abs(d).toFixed(0)}%：這不是神價，但很甜。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：可以，這波買了不會被笑。`,
+      `🟢 低於均價 ${Math.abs(d).toFixed(0)}%：屬於「看到就可以下手」那種。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：買吧，別演了。`,
+      `🟢 便宜 ${Math.abs(d).toFixed(0)}%：這價格算良心。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：這波是「小確幸」。`,
+      `🟢 低於均價 ${Math.abs(d).toFixed(0)}%：買完記得把材料塞滿背包。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：你手可以滑一下，但別一次梭哈。`,
+      `🟢 便宜 ${Math.abs(d).toFixed(0)}%：比你在利姆薩逛街還順。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：這價位 OK，不用再猶豫一整晚。`,
+      `🟢 低於均價 ${Math.abs(d).toFixed(0)}%：可以收，回頭再做也不虧。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：很甜，甜到想幫他按讚。`,
+      `🟢 便宜 ${Math.abs(d).toFixed(0)}%：買了不會被 FC 嘲笑。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：這波屬於「手快有手慢無」。`,
+      `🟢 低於均價 ${Math.abs(d).toFixed(0)}%：穩穩的撿，不用怕。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：你不買，掃貨仔會幫你買。`,
+      `🟢 便宜 ${Math.abs(d).toFixed(0)}%：這價格很台服，很可以。`,
     ];
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
   if (d <= -5) {
     const pool = [
-      `🟢 略低於均價 ${Math.abs(d).toFixed(0)}%：小賺也很爽`,
-      `🟢 低 ${Math.abs(d).toFixed(0)}%：可以，這波不虧`,
-      `🟢 比均價便宜 ${Math.abs(d).toFixed(0)}%：手可以滑一下`,
+      `🟢 略低於均價 ${Math.abs(d).toFixed(0)}%：小甜，買了不虧。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：這波算划算，手可以動。`,
+      `🟢 低 ${Math.abs(d).toFixed(0)}%：便宜一點點，但也很爽。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：比行情好看，OK。`,
+      `🟢 低 ${Math.abs(d).toFixed(0)}%：這價位買了不會覺得自己是盤子。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：可以收，算有賺到一杯珍奶。`,
+      `🟢 低 ${Math.abs(d).toFixed(0)}%：小撿漏，別太高調。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：舒服價，拿來練生產不錯。`,
+      `🟢 低 ${Math.abs(d).toFixed(0)}%：比你等隊友 ready 快一點。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：今天市場板沒坑你。`,
+      `🟢 低 ${Math.abs(d).toFixed(0)}%：買吧，這波算善意。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：不錯，至少不是被割。`,
+      `🟢 低 ${Math.abs(d).toFixed(0)}%：買了心情會 +1。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：算甜，甜度大概像 HQ 烹飪 +2%。`,
+      `🟢 低 ${Math.abs(d).toFixed(0)}%：別想太多，買。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：這價位很安全。`,
+      `🟢 低 ${Math.abs(d).toFixed(0)}%：小優勢，別猶豫到變盤。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：收一點就好，別被你自己抬價。`,
+      `🟢 低 ${Math.abs(d).toFixed(0)}%：OK 的撿漏線。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：買完繼續跑你的日課。`,
+      `🟢 低 ${Math.abs(d).toFixed(0)}%：這價位很「正常人」。`,
+      `🟢 -${Math.abs(d).toFixed(0)}%：可以，至少不是信仰價。`,
+      `🟢 低 ${Math.abs(d).toFixed(0)}%：今天商人沒有對你笑。`,
     ];
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
   if (d < 5) {
     const pool = [
-      `🟡 接近均價（${d.toFixed(0)}%）：正常價，買不買看心情`,
-      `🟡 行情價（${d.toFixed(0)}%）：不甜也不盤`,
-      `🟡 很普通（${d.toFixed(0)}%）：市場的樣子`,
+      `🟡 接近均價（${d.toFixed(0)}%）：行情價，買不買看你急不急。`,
+      `🟡 （${d.toFixed(0)}%）：很普通，普通到像每日隨機。`,
+      `🟡 （${d.toFixed(0)}%）：這價位不會被笑，也不會被稱讚。`,
+      `🟡 （${d.toFixed(0)}%）：市場板的日常，不甜不盤。`,
+      `🟡 （${d.toFixed(0)}%）：買了就是「正常人消費」。`,
+      `🟡 （${d.toFixed(0)}%）：如果你急就買，不急就等等看。`,
+      `🟡 （${d.toFixed(0)}%）：這波屬於「平穩」。`,
+      `🟡 （${d.toFixed(0)}%）：沒什麼槽點，我很難發揮。`,
+      `🟡 （${d.toFixed(0)}%）：行情線，別期待奇蹟價。`,
+      `🟡 （${d.toFixed(0)}%）：就…市場的樣子。`,
+      `🟡 （${d.toFixed(0)}%）：你現在是在買「方便」。`,
+      `🟡 （${d.toFixed(0)}%）：這價格跟你排本一樣：可以接受。`,
+      `🟡 （${d.toFixed(0)}%）：想省就多看幾個世界；想快就直接買。`,
+      `🟡 （${d.toFixed(0)}%）：不虧不賺，主打一個心安。`,
+      `🟡 （${d.toFixed(0)}%）：這價位大概就是「台服平均」。`,
+      `🟡 （${d.toFixed(0)}%）：沒有撿漏感，但也沒被割感。`,
+      `🟡 （${d.toFixed(0)}%）：買完別回頭看價格，會比較快樂。`,
+      `🟡 （${d.toFixed(0)}%）：正常價，別想太多。`,
+      `🟡 （${d.toFixed(0)}%）：這波你不會成為巴哈笑話主角。`,
+      `🟡 （${d.toFixed(0)}%）：可以，至少不是被商人教育。`,
+      `🟡 （${d.toFixed(0)}%）：你今天的運氣就一般般。`,
+      `🟡 （${d.toFixed(0)}%）：這價位像是沒吃食物 BUFF 的 DPS：正常。`,
+      `🟡 （${d.toFixed(0)}%）：行啦，過。`,
     ];
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
   if (d < 15) {
     const pool = [
-      `🟠 高於均價 ${d.toFixed(0)}%：有點貴…要不要等等？`,
-      `🟠 漲 ${d.toFixed(0)}%：商人開始膨脹 😤`,
-      `🟠 比均價貴 ${d.toFixed(0)}%：先觀望比較香`,
+      `🟠 高於均價 ${d.toFixed(0)}%：有點貴，商人開始試水溫了。`,
+      `🟠 +${d.toFixed(0)}%：你買的是「省時間」，不是省錢。`,
+      `🟠 貴 ${d.toFixed(0)}%：還行，但有點不甘心對吧。`,
+      `🟠 +${d.toFixed(0)}%：商人：欸你看，真的有人買。`,
+      `🟠 高 ${d.toFixed(0)}%：可以等等看，除非你真的急。`,
+      `🟠 +${d.toFixed(0)}%：這價位買下去，會想起「我是不是應該自己做」。`,
+      `🟠 貴 ${d.toFixed(0)}%：小盤味，聞到了嗎。`,
+      `🟠 +${d.toFixed(0)}%：如果你是拿來交任務…那也只能買。`,
+      `🟠 高 ${d.toFixed(0)}%：還沒到信仰價，但已經在路上。`,
+      `🟠 +${d.toFixed(0)}%：商人正在偷偷笑。`,
+      `🟠 貴 ${d.toFixed(0)}%：先別衝，去喝口水冷靜一下。`,
+      `🟠 +${d.toFixed(0)}%：你可能會在買完後立刻看到更便宜的。`,
+      `🟠 高 ${d.toFixed(0)}%：這波買了，心裡會有一點刺。`,
+      `🟠 +${d.toFixed(0)}%：巴哈看到會說「偏貴」。`,
+      `🟠 貴 ${d.toFixed(0)}%：不是不能買，是不太值得。`,
+      `🟠 +${d.toFixed(0)}%：買吧…如果你願意用錢解決問題。`,
+      `🟠 高 ${d.toFixed(0)}%：商人已經開始教育市場。`,
+      `🟠 +${d.toFixed(0)}%：你買完別截圖，不然你會後悔。`,
+      `🟠 貴 ${d.toFixed(0)}%：先看一下別的世界，有機會省一波。`,
+      `🟠 +${d.toFixed(0)}%：這價位像是「加班換錢」：可以，但不爽。`,
+      `🟠 高 ${d.toFixed(0)}%：別急著按購買，先滑一下列表。`,
+      `🟠 +${d.toFixed(0)}%：你現在是在資助商人買新坐騎。`,
+      `🟠 貴 ${d.toFixed(0)}%：可以忍就忍，不然你會心痛。`,
     ];
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
   if (d < 30) {
     const pool = [
-      `🔴 高 ${d.toFixed(0)}%：有點盤，小心別衝動 😈`,
-      `🔴 比均價貴 ${d.toFixed(0)}%：錢包正在哭`,
-      `🔴 漲 ${d.toFixed(0)}%：我不敢推薦（但你可以硬買）`,
+      `🔴 高 ${d.toFixed(0)}%：盤味爆出來了，手收回來。`,
+      `🔴 +${d.toFixed(0)}%：你確定要當今天的教材嗎？`,
+      `🔴 貴 ${d.toFixed(0)}%：這價格很敢，商人很勇。`,
+      `🔴 +${d.toFixed(0)}%：買下去會想在 FC 頻道裝沒事。`,
+      `🔴 高 ${d.toFixed(0)}%：這價位是「我就看你會不會買」。`,
+      `🔴 +${d.toFixed(0)}%：商人已經在利姆薩笑到抖肩。`,
+      `🔴 貴 ${d.toFixed(0)}%：你買的是信仰的前奏。`,
+      `🔴 +${d.toFixed(0)}%：這波買了，之後看到便宜會心碎。`,
+      `🔴 高 ${d.toFixed(0)}%：不急就別買，真的。`,
+      `🔴 +${d.toFixed(0)}%：你現在是在幫商人衝裝潢房子。`,
+      `🔴 貴 ${d.toFixed(0)}%：盤到我都想幫你按取消。`,
+      `🔴 +${d.toFixed(0)}%：這價位你敢買，我就敢叫你勇者。`,
+      `🔴 高 ${d.toFixed(0)}%：市場板正在教育你「急就要付學費」。`,
+      `🔴 +${d.toFixed(0)}%：先去打個副本冷靜一下。`,
+      `🔴 貴 ${d.toFixed(0)}%：你可以買，但你會後悔。`,
+      `🔴 +${d.toFixed(0)}%：商人看到你下單，會說「又一個」。`,
+      `🔴 高 ${d.toFixed(0)}%：這波不是購物，是獻祭。`,
+      `🔴 +${d.toFixed(0)}%：巴哈會留言「這也敢買？」`,
+      `🔴 貴 ${d.toFixed(0)}%：別急，等別人先當盤。`,
+      `🔴 +${d.toFixed(0)}%：你現在是商人的 KPI。`,
+      `🔴 高 ${d.toFixed(0)}%：先把購買按鈕放下。`,
+      `🔴 +${d.toFixed(0)}%：你可能只是少看一個世界。`,
+      `🔴 貴 ${d.toFixed(0)}%：這價位買了，晚上睡前會想起來。`,
     ];
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
   const pool = [
-    `☠️ 高 ${d.toFixed(0)}%：這不是市價，這是信仰價`,
-    `☠️ 漲到 ${d.toFixed(0)}%：商人：謝謝你養我`,
-    `☠️ ${d.toFixed(0)}%：你買下去我叫你大哥`,
+    `☠️ 高 ${d.toFixed(0)}%：這不是市價，是「信仰價」。`,
+    `☠️ +${d.toFixed(0)}%：商人今晚加菜，你是功臣。`,
+    `☠️ 高 ${d.toFixed(0)}%：你買下去，巴哈會幫你立碑。`,
+    `☠️ +${d.toFixed(0)}%：這價格像絕本首週：敢開敢賣。`,
+    `☠️ 高 ${d.toFixed(0)}%：你確定不是在買情緒價？`,
+    `☠️ +${d.toFixed(0)}%：這波買了，你就是市場板傳說。`,
+    `☠️ 高 ${d.toFixed(0)}%：這不是盤，是「超盤」。`,
+    `☠️ +${d.toFixed(0)}%：商人：謝謝你，我的新坐騎有著落了。`,
+    `☠️ 高 ${d.toFixed(0)}%：你買下去我叫你大哥，但我會偷笑。`,
+    `☠️ +${d.toFixed(0)}%：這價位只有「急」才解釋得通。`,
+    `☠️ 高 ${d.toFixed(0)}%：你按下購買的瞬間，錢包會尖叫。`,
+    `☠️ +${d.toFixed(0)}%：這是「我不降價你能怎樣」的態度價。`,
+    `☠️ 高 ${d.toFixed(0)}%：你買完別回頭看歷史，會受傷。`,
+    `☠️ +${d.toFixed(0)}%：市場板正在對你上課。`,
+    `☠️ 高 ${d.toFixed(0)}%：這波不是消費，是捐款。`,
+    `☠️ +${d.toFixed(0)}%：商人正在寫感謝信給你。`,
+    `☠️ 高 ${d.toFixed(0)}%：這價位可以直接截圖發文求安慰。`,
+    `☠️ +${d.toFixed(0)}%：你買下去，FC 會問你是不是喝了 HQ 藥水。`,
+    `☠️ 高 ${d.toFixed(0)}%：這價格在利姆薩會被圍觀。`,
+    `☠️ +${d.toFixed(0)}%：你現在是在養出下一個壟斷商人。`,
+    `☠️ 高 ${d.toFixed(0)}%：你很勇，但你的錢包更勇。`,
+    `☠️ +${d.toFixed(0)}%：這波買了，就別說是我讓你買的。`,
+    `☠️ 高 ${d.toFixed(0)}%：信仰值拉滿，尊敬。`,
   ];
   return pool[Math.floor(Math.random() * pool.length)];
 }
@@ -872,7 +1033,55 @@ async function renderItemsView(promptMsg, sid) {
 async function sendPrice(msg, itemId, itemName) {
   const WITHIN_7D = 7 * 24 * 60 * 60;
 
-  const prices = [];
+  const mean = (arr) => {
+    if (!arr || !arr.length) return null;
+    const nums = arr.map(Number).filter((x) => Number.isFinite(x));
+    if (!nums.length) return null;
+    return nums.reduce((a, b) => a + b, 0) / nums.length;
+  };
+
+  const pickMin = (listings) => {
+    if (!listings || !listings.length) return null;
+    const nums = listings.map((l) => Number(l.pricePerUnit)).filter((x) => Number.isFinite(x));
+    if (!nums.length) return null;
+    return Math.min(...nums);
+  };
+
+  const buildTable = (prices, bestWorld) => {
+    const worldW = Math.max(6, ...prices.map((p) => strWidth(p.world || "")), 6);
+    const priceW = 10;
+    const deltaW = 6;
+    const avgW = 10;
+
+    const header =
+      `${padRight("伺服器", worldW)}  ` +
+      `${padLeft("最低", priceW)}  ` +
+      `${padLeft("差異", deltaW)}  ` +
+      `${padLeft("均價", avgW)}`;
+
+    const sep = "-".repeat(strWidth(header));
+
+    const rows = prices.map((p) => {
+      const crown = p.world === bestWorld ? "🏆" : "  ";
+      const priceText = p.price === null ? "—" : fmtPriceCompact(p.price);
+      const avgText = p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold);
+      const dText = p.deltaPct === null ? "—" : deltaBadge(p.deltaPct);
+
+      return (
+        `${crown}${padRight(p.world, worldW)}  ` +
+        `${padLeft(priceText, priceW)}  ` +
+        `${padLeft(dText, deltaW)}  ` +
+        `${padLeft(avgText, avgW)}`
+      );
+    });
+
+    return ["```", header, sep, ...rows, "```"].join("
+");
+  };
+
+  const pricesNQ = [];
+  const pricesHQ = [];
+
   for (const w of WORLD_LIST) {
     try {
       const url = `https://universalis.app/api/v2/${encodeURIComponent(
@@ -882,71 +1091,89 @@ async function sendPrice(msg, itemId, itemName) {
       const r = await fetch(url);
       const d = await r.json();
 
-      const min = d.listings?.length
-        ? Math.min(...d.listings.map((l) => l.pricePerUnit))
-        : null;
+      const listings = Array.isArray(d.listings) ? d.listings : [];
+      const history = Array.isArray(d.recentHistory) ? d.recentHistory : [];
 
-      const avg = Number(d.averagePrice ?? d.currentAveragePrice ?? NaN);
-      const avgSold = Number.isFinite(avg) ? avg : null;
+      // NQ
+      const nqMin = pickMin(listings.filter((l) => !l.hq));
+      const nqAvgSold = mean(history.filter((h) => !h.hq).map((h) => h.pricePerUnit));
+      const nqDelta = calcDeltaPct(nqMin, nqAvgSold);
+      pricesNQ.push({ world: w, price: nqMin, avgSold: nqAvgSold, deltaPct: nqDelta });
 
-      const deltaPct = calcDeltaPct(min, avgSold);
-      prices.push({ world: w, price: min, avgSold, deltaPct });
+      // HQ
+      const hqMin = pickMin(listings.filter((l) => !!l.hq));
+      const hqAvgSold = mean(history.filter((h) => !!h.hq).map((h) => h.pricePerUnit));
+      const hqDelta = calcDeltaPct(hqMin, hqAvgSold);
+      pricesHQ.push({ world: w, price: hqMin, avgSold: hqAvgSold, deltaPct: hqDelta });
     } catch {
-      prices.push({ world: w, price: null, avgSold: null, deltaPct: null });
+      pricesNQ.push({ world: w, price: null, avgSold: null, deltaPct: null });
+      pricesHQ.push({ world: w, price: null, avgSold: null, deltaPct: null });
     }
   }
 
-  const valid = prices.filter((p) => p.price !== null);
-  if (!valid.length) {
+  const validNQ = pricesNQ.filter((p) => p.price !== null);
+  const validHQ = pricesHQ.filter((p) => p.price !== null);
+
+  if (!validNQ.length && !validHQ.length) {
     await msg.reply("⚠️ 查不到價格資料");
     return;
   }
 
-  valid.sort((a, b) => a.price - b.price);
-  const best = valid[0];
+  let bestNQ = null;
+  if (validNQ.length) {
+    validNQ.sort((a, b) => a.price - b.price);
+    bestNQ = validNQ[0];
+  }
 
-  const worldW = Math.max(6, ...prices.map((p) => strWidth(p.world || "")), 6);
-  const priceW = 10;
-  const deltaW = 6;
-  const avgW = 10;
+  let bestHQ = null;
+  if (validHQ.length) {
+    validHQ.sort((a, b) => a.price - b.price);
+    bestHQ = validHQ[0];
+  }
 
-  const header =
-    `${padRight("伺服器", worldW)}  ` +
-    `${padLeft("最低", priceW)}  ` +
-    `${padLeft("差異", deltaW)}  ` +
-    `${padLeft("均價", avgW)}`;
+  const nqTable = validNQ.length ? buildTable(pricesNQ, bestNQ.world) : null;
+  const hqTable = validHQ.length ? buildTable(pricesHQ, bestHQ.world) : null;
 
-  const sep = "-".repeat(strWidth(header));
+  const nqDeltaText = bestNQ?.deltaPct === null || !bestNQ ? "—" : deltaBadge(bestNQ.deltaPct);
+  const hqDeltaText = bestHQ?.deltaPct === null || !bestHQ ? "—" : deltaBadge(bestHQ.deltaPct);
 
-  const rows = prices.map((p) => {
-    const crown = p.world === best.world ? "🏆" : "  ";
-    const priceText = p.price === null ? "—" : fmtPriceCompact(p.price);
-    const avgText = p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold);
-    const dText = p.deltaPct === null ? "—" : deltaBadge(p.deltaPct);
+  const nqRoast = bestNQ ? moodFromDelta(bestNQ.deltaPct) : null;
+  const hqRoast = bestHQ ? moodFromDelta(bestHQ.deltaPct) : null;
 
-    return (
-      `${crown}${padRight(p.world, worldW)}  ` +
-      `${padLeft(priceText, priceW)}  ` +
-      `${padLeft(dText, deltaW)}  ` +
-      `${padLeft(avgText, avgW)}`
-    );
-  });
+  const lines = [];
+  if (bestNQ) {
+    lines.push(`🟦 NQ 最低價：${bestNQ.world} ・ ${fmtPrice(bestNQ.price)}（${nqDeltaText}）`);
+    lines.push(`📊 NQ 近 7 天成交均價：${bestNQ.avgSold ? fmtPrice(bestNQ.avgSold) : "—"}`);
+    lines.push(`💬 NQ 評語：${nqRoast}`);
+  } else {
+    lines.push(`🟦 NQ：—（目前沒有在售的 NQ）`);
+  }
 
-  const table = ["```", header, sep, ...rows, "```"].join("\n");
+  lines.push(""); // spacer
 
-  const roast = moodFromDelta(best.deltaPct);
-  const roastLine = `💬 評語：${roast}`;
+  if (bestHQ) {
+    lines.push(`🟪 HQ 最低價：${bestHQ.world} ・ ${fmtPrice(bestHQ.price)}（${hqDeltaText}）`);
+    lines.push(`📊 HQ 近 7 天成交均價：${bestHQ.avgSold ? fmtPrice(bestHQ.avgSold) : "—"}`);
+    lines.push(`💬 HQ 評語：${hqRoast}`);
+  } else {
+    lines.push(`🟪 HQ：—（此物品可能沒有 HQ 版本，或目前沒有 HQ 掛單）`);
+  }
 
-  const bestDeltaText = best.deltaPct === null ? "—" : deltaBadge(best.deltaPct);
+  lines.push(""); // spacer
+
+  if (nqTable) {
+    lines.push("【NQ】");
+    lines.push(nqTable);
+  }
+  if (hqTable) {
+    lines.push("【HQ】");
+    lines.push(hqTable);
+  }
 
   const embed = new EmbedBuilder()
     .setTitle(`📦 ${itemName}`)
-    .setDescription(
-      `🥇 最低價：${best.world} ・ ${fmtPrice(best.price)}（${bestDeltaText}）\n` +
-        `📊 近 7 天成交均價：${best.avgSold ? fmtPrice(best.avgSold) : "—"}\n` +
-        `${roastLine}\n\n` +
-        table
-    );
+    .setDescription(lines.join("
+"));
 
   const reply = await msg.reply({ embeds: [embed] });
   setTimeout(
