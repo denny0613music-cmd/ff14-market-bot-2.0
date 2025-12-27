@@ -426,37 +426,14 @@ function moodFromDelta(deltaPct) {
    表格排版工具（等寬 code block）
 ================================ */
 function strWidth(s) {
-  // Discord code block 字寬估算：
-  // - ASCII: 1
-  // - 常見破壞對齊字元（— 等）視為 1
-  // - Emoji（大多在 monospace 佔 2 格）視為 2
-  // - 其餘（中文等）：2
+  // 粗略：ASCII=1，中文=2；但「—」這種破折號在 Discord 顯示通常只佔 1 格，特別處理避免欄位飄
   let w = 0;
   for (const ch of String(s)) {
-    const cp = ch.codePointAt(0);
-    if (ch === "—" || ch === "–" || ch === "−") {
-      w += 1;
-      continue;
-    }
-    // 基本 ASCII
-    if (cp <= 0x7f) {
-      w += 1;
-      continue;
-    }
-    // Emoji 範圍（粗抓，避免把 emoji 當成 2 寬造成對齊錯）
-    if (
-      (cp >= 0x1F000 && cp <= 0x1FAFF) || // Emoji / Symbols
-      (cp >= 0x2600 && cp <= 0x27BF)     // Dingbats / Misc symbols
-    ) {
-      w += 2;
-      continue;
-    }
-    // CJK / 其他非 ASCII
-    w += 2;
+    if (ch === "—" || ch === "－" || ch === "–") { w += 1; continue; }
+    w += ch.charCodeAt(0) <= 0x7f ? 1 : 2;
   }
   return w;
 }
-
 
 function padRight(s, width) {
   s = String(s);
@@ -1057,52 +1034,57 @@ async function renderItemsView(promptMsg, sid) {
    查價（成交均價差異%）＋ 表格UI（整齊 + 吐槽對齊）
 ================================ */
 async function sendPrice(msg, itemId, itemName) {
-  const Wconst buildTable = (prices, bestWorld) => {
-    // ✅ 最低價用 emoji（但放在「獨立標記欄」）=> 欄位起點一致，永遠對齊
-    const markW = 2; // 讓 💰 能穩定佔位
-    const markOf = (w) => (w === bestWorld ? "💰" : "");
+  const WITHIN_7D = 7 * 24 * 60 * 60;
 
-    const worldW = Math.max(6, ...prices.map((p) => strWidth(p.world || "")), 6);
-    const priceW = 10;
-    const deltaW = 6;
-    const avgW = 10;
+  const mean = (arr) => {
+    if (!arr || !arr.length) return null;
+    const nums = arr.map(Number).filter((x) => Number.isFinite(x));
+    if (!nums.length) return null;
+    return nums.reduce((a, b) => a + b, 0) / nums.length;
+  };
+
+  const pickMin = (listings) => {
+    if (!listings || !listings.length) return null;
+    const nums = listings.map((l) => Number(l.pricePerUnit)).filter((x) => Number.isFinite(x));
+    if (!nums.length) return null;
+    return Math.min(...nums);
+  };
+
+  const buildTable = (prices, bestWorld) => {
+    // ✅ 表格永遠對齊：最低價用「獨立標記欄」放 💰（不塞進伺服器欄）
+    const markHeader = "標記";
+    const markW = Math.max(strWidth(markHeader), 2); // 💰 約 2 格，標題是 4 格
+    const worldHeader = "伺服器";
+    const priceHeader = "最低";
+    const deltaHeader = "差異";
+    const avgHeader = "均價";
+
+    const priceTextOf = (p) => (p.price === null ? "—" : fmtPriceCompact(p.price));
+    const avgTextOf = (p) => (p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold));
+    const deltaTextOf = (p) => (p.deltaPct === null ? "—" : deltaBadge(p.deltaPct));
+
+    const worldW = Math.max(strWidth(worldHeader), ...prices.map((p) => strWidth(p.world || "")));
+    const priceW = Math.max(strWidth(priceHeader), ...prices.map((p) => strWidth(priceTextOf(p))));
+    const deltaW = Math.max(strWidth(deltaHeader), ...prices.map((p) => strWidth(deltaTextOf(p))));
+    const avgW = Math.max(strWidth(avgHeader), ...prices.map((p) => strWidth(avgTextOf(p))));
 
     const header =
-      `${padRight("標記", markW)}  ` +
-      `${padRight("伺服器", worldW)}  ` +
-      `${padLeft("最低", priceW)}  ` +
-      `${padLeft("差異", deltaW)}  ` +
-      `${padLeft("均價", avgW)}`;
+      `${padRight(markHeader, markW)}  ` +
+      `${padRight(worldHeader, worldW)}  ` +
+      `${padLeft(priceHeader, priceW)}  ` +
+      `${padLeft(deltaHeader, deltaW)}  ` +
+      `${padLeft(avgHeader, avgW)}`;
 
     const sep = "-".repeat(strWidth(header));
 
     const rows = prices.map((p) => {
-      const mark = markOf(p.world);
-      const priceText = p.price === null ? "—" : fmtPriceCompact(p.price);
-      const avgText = p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold);
-      const dText = p.deltaPct === null ? "—" : deltaBadge(p.deltaPct);
-
+      const mark = p.world === bestWorld ? "💰" : "";
       return (
         `${padRight(mark, markW)}  ` +
         `${padRight(p.world, worldW)}  ` +
-        `${padLeft(priceText, priceW)}  ` +
-        `${padLeft(dText, deltaW)}  ` +
-        `${padLeft(avgText, avgW)}`
-      );
-    });
-
-    return ["```", header, sep, ...rows, "```"].join("\n");
-  };
-ext = markWorld(p.world || "");
-      const priceText = p.price === null ? "—" : fmtPriceCompact(p.price);
-      const avgText = p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold);
-      const dText = p.deltaPct === null ? "—" : deltaBadge(p.deltaPct);
-
-      return (
-        `${padRight(worldText, worldW)}  ` +
-        `${padLeft(priceText, priceW)}  ` +
-        `${padLeft(dText, deltaW)}  ` +
-        `${padLeft(avgText, avgW)}`
+        `${padLeft(priceTextOf(p), priceW)}  ` +
+        `${padLeft(deltaTextOf(p), deltaW)}  ` +
+        `${padLeft(avgTextOf(p), avgW)}`
       );
     });
 
