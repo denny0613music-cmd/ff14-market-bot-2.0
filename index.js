@@ -1048,7 +1048,13 @@ async function sendPrice(msg, itemId, itemName) {
   };
 
   const buildTable = (prices, bestWorld) => {
-    const worldW = Math.max(6, ...prices.map((p) => strWidth(p.world || "")), 6);
+    // ✅ 完全避開 emoji 寬度問題：用純 ASCII 的 * 當冠軍標記
+    // - 最低價伺服器：世界名後面加 *
+    // - 其他：世界名後面補一格空白，視覺上同欄寬
+    const markWorld = (w) => (w === bestWorld ? `${w}*` : `${w} `);
+
+    const worldDisplays = prices.map((p) => markWorld(p.world || ""));
+    const worldW = Math.max(6, ...worldDisplays.map((s) => strWidth(s)), 6);
     const priceW = 10;
     const deltaW = 6;
     const avgW = 10;
@@ -1062,13 +1068,13 @@ async function sendPrice(msg, itemId, itemName) {
     const sep = "-".repeat(strWidth(header));
 
     const rows = prices.map((p) => {
-      const crown = p.world === bestWorld ? "🏆" : "  ";
+      const worldText = markWorld(p.world || "");
       const priceText = p.price === null ? "—" : fmtPriceCompact(p.price);
       const avgText = p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold);
       const dText = p.deltaPct === null ? "—" : deltaBadge(p.deltaPct);
 
       return (
-        `${crown}${padRight(p.world, worldW)}  ` +
+        `${padRight(worldText, worldW)}  ` +
         `${padLeft(priceText, priceW)}  ` +
         `${padLeft(dText, deltaW)}  ` +
         `${padLeft(avgText, avgW)}`
