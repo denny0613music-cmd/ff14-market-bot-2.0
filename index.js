@@ -1048,13 +1048,7 @@ async function sendPrice(msg, itemId, itemName) {
   };
 
   const buildTable = (prices, bestWorld) => {
-    // ✅ 完全避開 emoji 寬度問題：用純 ASCII 的 * 當冠軍標記
-    // - 最低價伺服器：世界名後面加 *
-    // - 其他：世界名後面補一格空白，視覺上同欄寬
-    const markWorld = (w) => (w === bestWorld ? `${w}*` : `${w} `);
-
-    const worldDisplays = prices.map((p) => markWorld(p.world || ""));
-    const worldW = Math.max(6, ...worldDisplays.map((s) => strWidth(s)), 6);
+    const worldW = Math.max(6, ...prices.map((p) => strWidth(p.world || "")), 6);
     const priceW = 10;
     const deltaW = 6;
     const avgW = 10;
@@ -1068,13 +1062,13 @@ async function sendPrice(msg, itemId, itemName) {
     const sep = "-".repeat(strWidth(header));
 
     const rows = prices.map((p) => {
-      const worldText = markWorld(p.world || "");
+      const crown = p.world === bestWorld ? "🏆" : "  ";
       const priceText = p.price === null ? "—" : fmtPriceCompact(p.price);
       const avgText = p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold);
       const dText = p.deltaPct === null ? "—" : deltaBadge(p.deltaPct);
 
       return (
-        `${padRight(worldText, worldW)}  ` +
+        `${crown}${padRight(p.world, worldW)}  ` +
         `${padLeft(priceText, priceW)}  ` +
         `${padLeft(dText, deltaW)}  ` +
         `${padLeft(avgText, avgW)}`
@@ -1145,39 +1139,58 @@ async function sendPrice(msg, itemId, itemName) {
   const nqRoast = bestNQ ? moodFromDelta(bestNQ.deltaPct) : null;
   const hqRoast = bestHQ ? moodFromDelta(bestHQ.deltaPct) : null;
 
-  const lines = [];
-  if (bestNQ) {
-    lines.push(`🟦 NQ 最低價：${bestNQ.world} ・ ${fmtPrice(bestNQ.price)}（${nqDeltaText}）`);
-    lines.push(`📊 NQ 近 7 天成交均價：${bestNQ.avgSold ? fmtPrice(bestNQ.avgSold) : "—"}`);
-    lines.push(`💬 NQ 評語：${nqRoast}`);
-  } else {
-    lines.push(`🟦 NQ：—（目前沒有在售的 NQ）`);
+  // ========= UI ONLY：B-1 壓縮兩段式（評語只在最低價下方） =========
+const lines = [];
+
+// NQ 區段
+lines.push("【NQ】");
+if (bestNQ) {
+  lines.push(
+    `💰 ${bestNQ.world}　最低 ${fmtPrice(bestNQ.price)}｜${nqDeltaText}｜均價 ${bestNQ.avgSold ? fmtPrice(bestNQ.avgSold) : "—"}`
+  );
+  lines.push(`💬 ${nqRoast}`);
+  lines.push("");
+
+  for (const p of pricesNQ) {
+    if (!p || p.price === null) continue;
+    if (p.world === bestNQ.world) continue;
+    const dText = p.deltaPct === null ? "—" : deltaBadge(p.deltaPct);
+    lines.push(
+      `${p.world}　最低 ${fmtPrice(p.price)}｜${dText}｜均價 ${p.avgSold ? fmtPrice(p.avgSold) : "—"}`
+    );
   }
+} else {
+  lines.push("—（目前沒有在售的 NQ）");
+}
 
-  lines.push(""); // spacer
+lines.push("");
 
-  if (bestHQ) {
-    lines.push(`🟪 HQ 最低價：${bestHQ.world} ・ ${fmtPrice(bestHQ.price)}（${hqDeltaText}）`);
-    lines.push(`📊 HQ 近 7 天成交均價：${bestHQ.avgSold ? fmtPrice(bestHQ.avgSold) : "—"}`);
-    lines.push(`💬 HQ 評語：${hqRoast}`);
-  } else {
-    lines.push(`🟪 HQ：—（此物品可能沒有 HQ 版本，或目前沒有 HQ 掛單）`);
+// HQ 區段
+lines.push("【HQ】");
+if (bestHQ) {
+  lines.push(
+    `💰 ${bestHQ.world}　最低 ${fmtPrice(bestHQ.price)}｜${hqDeltaText}｜均價 ${bestHQ.avgSold ? fmtPrice(bestHQ.avgSold) : "—"}`
+  );
+  lines.push(`💬 ${hqRoast}`);
+  lines.push("");
+
+  for (const p of pricesHQ) {
+    if (!p || p.price === null) continue;
+    if (p.world === bestHQ.world) continue;
+    const dText = p.deltaPct === null ? "—" : deltaBadge(p.deltaPct);
+    lines.push(
+      `${p.world}　最低 ${fmtPrice(p.price)}｜${dText}｜均價 ${p.avgSold ? fmtPrice(p.avgSold) : "—"}`
+    );
   }
+} else {
+  lines.push("—（此物品可能沒有 HQ 版本，或目前沒有 HQ 掛單）");
+}
 
-  lines.push(""); // spacer
-
-  if (nqTable) {
-    lines.push("【NQ】");
-    lines.push(nqTable);
-  }
-  if (hqTable) {
-    lines.push("【HQ】");
-    lines.push(hqTable);
-  }
-
-  const embed = new EmbedBuilder()
-    .setTitle(`📦 ${itemName}`)
-    .setDescription(lines.join("\n"));
+const embed = new EmbedBuilder()
+  .setTitle(`📦 ${itemName}`)
+  .setDescription(lines.join("
+"));
+// ========= UI ONLY：結束 =========
 
   const reply = await msg.reply({ embeds: [embed] });
   setTimeout(
