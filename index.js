@@ -426,11 +426,37 @@ function moodFromDelta(deltaPct) {
    表格排版工具（等寬 code block）
 ================================ */
 function strWidth(s) {
-  // 粗略：ASCII=1，其他=2（中文寬度）
+  // Discord code block 字寬估算：
+  // - ASCII: 1
+  // - 常見破壞對齊字元（— 等）視為 1
+  // - Emoji（大多在 monospace 佔 2 格）視為 2
+  // - 其餘（中文等）：2
   let w = 0;
-  for (const ch of String(s)) w += ch.charCodeAt(0) <= 0x7f ? 1 : 2;
+  for (const ch of String(s)) {
+    const cp = ch.codePointAt(0);
+    if (ch === "—" || ch === "–" || ch === "−") {
+      w += 1;
+      continue;
+    }
+    // 基本 ASCII
+    if (cp <= 0x7f) {
+      w += 1;
+      continue;
+    }
+    // Emoji 範圍（粗抓，避免把 emoji 當成 2 寬造成對齊錯）
+    if (
+      (cp >= 0x1F000 && cp <= 0x1FAFF) || // Emoji / Symbols
+      (cp >= 0x2600 && cp <= 0x27BF)     // Dingbats / Misc symbols
+    ) {
+      w += 2;
+      continue;
+    }
+    // CJK / 其他非 ASCII
+    w += 2;
+  }
   return w;
 }
+
 
 function padRight(s, width) {
   s = String(s);
@@ -1031,30 +1057,11 @@ async function renderItemsView(promptMsg, sid) {
    查價（成交均價差異%）＋ 表格UI（整齊 + 吐槽對齊）
 ================================ */
 async function sendPrice(msg, itemId, itemName) {
-  const WITHIN_7D = 7 * 24 * 60 * 60;
+  const Wconst buildTable = (prices, bestWorld) => {
+    // ✅ 最低價用 emoji（但放在「獨立標記欄」）=> 欄位起點一致，永遠對齊
+    const markW = 2; // 讓 💰 能穩定佔位
+    const markOf = (w) => (w === bestWorld ? "💰" : "");
 
-  const mean = (arr) => {
-    if (!arr || !arr.length) return null;
-    const nums = arr.map(Number).filter((x) => Number.isFinite(x));
-    if (!nums.length) return null;
-    return nums.reduce((a, b) => a + b, 0) / nums.length;
-  };
-
-  const pickMin = (listings) => {
-    if (!listings || !listings.length) return null;
-    const nums = listings.map((l) => Number(l.pricePerUnit)).filter((x) => Number.isFinite(x));
-    if (!nums.length) return null;
-    return Math.min(...nums);
-  };
-
-  const buildTable = (prices, bestWorld) => {
-    // ✅ 永遠不歪：把「最低價標記」做成獨立欄位，不要塞進伺服器名稱欄位
-    // - 表格內使用 :moneybag:（純文字，寬度固定；不吃 emoji 圖示寬度影響）
-    // - 只有最低價那行顯示標記，其餘留空，但一樣佔欄寬
-    const MARK = ":moneybag:";
-    const markText = (w) => (bestWorld && w === bestWorld ? MARK : "");
-
-    const markW = Math.max(strWidth("標記"), strWidth(MARK));
     const worldW = Math.max(6, ...prices.map((p) => strWidth(p.world || "")), 6);
     const priceW = 10;
     const deltaW = 6;
@@ -1070,15 +1077,28 @@ async function sendPrice(msg, itemId, itemName) {
     const sep = "-".repeat(strWidth(header));
 
     const rows = prices.map((p) => {
-      const worldText = p.world || "";
-      const mark = markText(worldText);
-
+      const mark = markOf(p.world);
       const priceText = p.price === null ? "—" : fmtPriceCompact(p.price);
       const avgText = p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold);
       const dText = p.deltaPct === null ? "—" : deltaBadge(p.deltaPct);
 
       return (
         `${padRight(mark, markW)}  ` +
+        `${padRight(p.world, worldW)}  ` +
+        `${padLeft(priceText, priceW)}  ` +
+        `${padLeft(dText, deltaW)}  ` +
+        `${padLeft(avgText, avgW)}`
+      );
+    });
+
+    return ["```", header, sep, ...rows, "```"].join("\n");
+  };
+ext = markWorld(p.world || "");
+      const priceText = p.price === null ? "—" : fmtPriceCompact(p.price);
+      const avgText = p.avgSold === null ? "—" : fmtPriceCompact(p.avgSold);
+      const dText = p.deltaPct === null ? "—" : deltaBadge(p.deltaPct);
+
+      return (
         `${padRight(worldText, worldW)}  ` +
         `${padLeft(priceText, priceW)}  ` +
         `${padLeft(dText, deltaW)}  ` +
