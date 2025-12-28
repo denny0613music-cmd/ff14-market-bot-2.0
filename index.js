@@ -12,6 +12,7 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
 } from "discord.js";
 import { Converter } from "opencc-js";
 
@@ -809,21 +810,7 @@ client.on("messageCreate", async (msg) => {
 
   const top = results
     .sort((a, b) => (a.id === manualId ? -1 : 1))
-    .slice(0, 10);
-
-  const rows = [];
-  for (let i = 0; i < top.length; i += 5) {
-    const row = new ActionRowBuilder();
-    top.slice(i, i + 5).forEach((r, idx) => {
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`pick_${r.id}`)
-          .setLabel(`${i + idx + 1}. ${r.name}`)
-          .setStyle(ButtonStyle.Primary)
-      );
-    });
-    rows.push(row);
-  }
+    .slice(0, 20);
 
   const hintLine = rescueInfo
     ? `（我用「${rescueInfo.usedQuery}」救援搜尋：${rescueInfo.reason}）\n`
@@ -834,9 +821,21 @@ client.on("messageCreate", async (msg) => {
       ? "⚠️ 關鍵字太短：我不會把它記住（避免下次被綁死選錯），但你仍可照常選。"
       : "⭐ 我會記住你選的結果，下次更快。";
 
+  const select = new StringSelectMenuBuilder()
+    .setCustomId("pick_item")
+    .setPlaceholder("請選擇你要查詢的物品")
+    .addOptions(
+      top.map((r, idx) => ({
+        label: `${idx + 1}. ${r.name}`.slice(0, 100),
+        value: String(r.id),
+      }))
+    );
+
+  const row = new ActionRowBuilder().addComponents(select);
+
   const prompt = await msg.reply({
     content: `❓ 找到多個「${query}」相關物品，請選擇：\n${hintLine}${learnHint}`,
-    components: rows,
+    components: [row],
   });
 
   const collector = prompt.createMessageComponentCollector({ time: 60000 });
@@ -844,7 +843,7 @@ client.on("messageCreate", async (msg) => {
   collector.on("collect", async (i) => {
     if (i.user.id !== msg.author.id) return;
 
-    const pickedId = Number(i.customId.replace("pick_", ""));
+    const pickedId = Number(i.values[0]);
     const picked = top.find((t) => t.id === pickedId);
     if (!picked) return;
 
