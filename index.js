@@ -100,6 +100,7 @@ const DEFAULT_TERM_MAP = {
   咕波: "庫啵",
   咕波裝備箱: "庫啵裝備箱",
   咕波箱: "庫啵裝備箱",
+  紅蘿蔔: "胡蘿蔔",
 };
 
 function loadTermMap() {
