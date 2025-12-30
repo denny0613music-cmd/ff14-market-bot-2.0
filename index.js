@@ -103,7 +103,7 @@ const DEFAULT_TERM_MAP = {
   咕波箱: "庫啵裝備箱",
   紅蘿蔔: "胡蘿蔔",
   山雞蟾蜍: "山雞",
-  卡札納: "卡扎纳", 
+  卡札納爾: "卡扎纳尔", 
 };
 
 function loadTermMap() {
