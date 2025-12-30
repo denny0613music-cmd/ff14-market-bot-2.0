@@ -9,6 +9,7 @@
     "build:items": "node build_items_zh_tw_full.js"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^0.1.88",
     "discord.js": "^14.25.1",
     "dotenv": "^17.2.3",
     "node-fetch": "^3.3.2",
