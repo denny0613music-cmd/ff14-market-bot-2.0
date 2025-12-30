@@ -486,6 +486,26 @@ async function getCanvasModule() {
   return __canvasPromise;
 }
 
+
+// ✅ 內嵌字型（解法 A）：避免 Render/Linux 沒中文字型導致「框框」
+// 把字型檔放在專案：./assets/fonts/NotoSansCJK-Regular.ttc
+const CJK_FONT_PATH = "./assets/fonts/NotoSansCJK-Regular.ttc";
+let __cjkFontReady = false;
+function ensureCjkFont(canvasMod) {
+  if (__cjkFontReady) return true;
+  try {
+    const GlobalFonts = canvasMod?.GlobalFonts;
+    if (GlobalFonts?.registerFromPath) {
+      // registerFromPath 回傳 boolean（某些版本會是 void），都視為成功
+      const ok = GlobalFonts.registerFromPath(CJK_FONT_PATH, "NotoSansCJK");
+      __cjkFontReady = ok !== false;
+      return __cjkFontReady;
+    }
+  } catch {}
+  return __cjkFontReady;
+}
+
+
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
 }
@@ -522,8 +542,16 @@ async function renderMarketBoardPNG({
 
   const { createCanvas, loadImage } = canvasMod;
 
-  const W = 900;
-  const H = 1350;
+  // ✅ 註冊繁中 CJK 字型（避免字變框框）
+  ensureCjkFont(canvasMod);
+
+  // ✅ 放大畫布（Discord 好讀）
+  const BASE_W = 900;
+  const BASE_H = 1350;
+  const W = 1100;
+  const H = 1650;
+  const s = W / BASE_W;
+
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext("2d");
 
@@ -536,14 +564,14 @@ async function renderMarketBoardPNG({
   ctx.fillStyle = "rgba(0,0,0,0.18)";
   ctx.fillRect(0, 0, W, H);
 
-  // 內容面板（半透明）
-  const panelX = 70;
-  const panelY = 140;
-  const panelW = W - 140;
-  const panelH = H - 240;
+  // 內容面板（半透明）— 依畫布縮放
+  const panelX = Math.round(70 * s);
+  const panelY = Math.round(140 * s);
+  const panelW = W - panelX * 2;
+  const panelH = H - Math.round(240 * s);
 
   ctx.save();
-  drawRoundedRect(ctx, panelX, panelY, panelW, panelH, 22);
+  drawRoundedRect(ctx, panelX, panelY, panelW, panelH, Math.round(26 * s));
   ctx.fillStyle = "rgba(15, 18, 22, 0.62)";
   ctx.fill();
   ctx.lineWidth = 2;
@@ -553,21 +581,21 @@ async function renderMarketBoardPNG({
 
   // 標題
   ctx.fillStyle = "rgba(255,255,255,0.95)";
-  ctx.font = "bold 34px sans-serif";
-  ctx.fillText("FF14 Market", panelX + 24, panelY + 54);
+  ctx.font = `bold ${Math.round(44 * s)}px "NotoSansCJK", sans-serif`;
+  ctx.fillText("FF14 Market", panelX + 24, panelY + Math.round(66 * s));
 
-  ctx.font = "600 24px sans-serif";
+  ctx.font = `600 ${Math.round(32 * s)}px "NotoSansCJK", sans-serif`;
   ctx.fillStyle = "rgba(255,255,255,0.9)";
   const safeName = String(itemName || "").slice(0, 40);
-  ctx.fillText(`物品：${safeName}`, panelX + 24, panelY + 92);
+  ctx.fillText(`物品：${safeName}`, panelX + 24, panelY + Math.round(112 * s));
 
   // 快速重點
-  ctx.font = "bold 22px sans-serif";
+  ctx.font = `bold ${Math.round(30 * s)}px "NotoSansCJK", sans-serif`;
   ctx.fillStyle = "rgba(255,255,255,0.92)";
-  ctx.fillText("快速重點", panelX + 24, panelY + 132);
+  ctx.fillText("快速重點", panelX + 24, panelY + Math.round(160 * s));
 
-  ctx.font = "600 20px sans-serif";
-  const yQuick = panelY + 164;
+  ctx.font = `600 ${Math.round(26 * s)}px "NotoSansCJK", sans-serif`;
+  const yQuick = panelY + Math.round(198 * s);
   if (bestNQ) {
     ctx.fillText(
       `NQ 最低：${bestNQ.world}  ${fmtPrice(bestNQ.price)}（${fmtPctArrow(bestNQ.deltaPct)}）`,
@@ -582,10 +610,10 @@ async function renderMarketBoardPNG({
     ctx.fillText(
       `HQ 最低：${bestHQ.world}  ${fmtPrice(bestHQ.price)}（${fmtPctArrow(bestHQ.deltaPct)}）`,
       panelX + 24,
-      yQuick + 28
+      yQuick + Math.round(36 * s)
     );
   } else {
-    ctx.fillText("HQ 最低：—", panelX + 24, yQuick + 28);
+    ctx.fillText("HQ 最低：—", panelX + 24, yQuick + Math.round(36 * s));
   }
 
   // 表格繪製工具
@@ -593,37 +621,37 @@ async function renderMarketBoardPNG({
     let y = startY;
 
     // section title
-    ctx.font = "bold 22px sans-serif";
+    ctx.font = `bold ${Math.round(30 * s)}px "NotoSansCJK", sans-serif`;
     ctx.fillStyle = "rgba(255,255,255,0.92)";
     ctx.fillText(title, panelX + 24, y);
-    y += 20;
+    y += Math.round(26 * s);
 
     // header row
-    ctx.font = "bold 18px sans-serif";
+    ctx.font = `bold ${Math.round(24 * s)}px "NotoSansCJK", sans-serif`;
     ctx.fillStyle = "rgba(255,255,255,0.82)";
     const colX = {
       world: panelX + 24,
-      price: panelX + 360,
-      delta: panelX + 555,
-      avg: panelX + 680,
+      price: panelX + Math.round(440 * s),
+      delta: panelX + Math.round(680 * s),
+      avg: panelX + Math.round(835 * s),
     };
-    ctx.fillText("伺服器", colX.world, y + 22);
-    ctx.fillText("最低", colX.price, y + 22);
-    ctx.fillText("差異", colX.delta, y + 22);
-    ctx.fillText("均價", colX.avg, y + 22);
+    ctx.fillText("伺服器", colX.world, y + Math.round(28 * s));
+    ctx.fillText("最低", colX.price, y + Math.round(28 * s));
+    ctx.fillText("差異", colX.delta, y + Math.round(28 * s));
+    ctx.fillText("均價", colX.avg, y + Math.round(28 * s));
 
     // divider
     ctx.strokeStyle = "rgba(255,255,255,0.18)";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(panelX + 24, y + 32);
-    ctx.lineTo(panelX + panelW - 24, y + 32);
+    ctx.moveTo(panelX + 24, y + Math.round(40 * s));
+    ctx.lineTo(panelX + panelW - 24, y + Math.round(40 * s));
     ctx.stroke();
 
-    y += 44;
+    y += Math.round(56 * s);
 
-    const rowH = 32; // 緊湊行距
-    ctx.font = "600 18px sans-serif";
+    const rowH = Math.round(44 * s); // 放大行距（Discord 好讀）
+    ctx.font = `600 ${Math.round(24 * s)}px "NotoSansCJK", sans-serif`;
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -632,16 +660,16 @@ async function renderMarketBoardPNG({
       // zebra
       if (i % 2 === 0) {
         ctx.fillStyle = "rgba(255,255,255,0.04)";
-        ctx.fillRect(panelX + 18, y - 22, panelW - 36, rowH);
+        ctx.fillRect(panelX + Math.round(18 * s), y - Math.round(30 * s), panelW - Math.round(36 * s), rowH);
       }
 
       // BEST 黃色高亮
       if (isBest) {
         ctx.fillStyle = "rgba(255, 213, 79, 0.28)";
-        ctx.fillRect(panelX + 18, y - 22, panelW - 36, rowH);
+        ctx.fillRect(panelX + Math.round(18 * s), y - Math.round(30 * s), panelW - Math.round(36 * s), rowH);
         ctx.strokeStyle = "rgba(249, 168, 37, 0.85)";
         ctx.lineWidth = 2;
-        ctx.strokeRect(panelX + 18, y - 22, panelW - 36, rowH);
+        ctx.strokeRect(panelX + Math.round(18 * s), y - Math.round(30 * s), panelW - Math.round(36 * s), rowH);
       }
 
       ctx.fillStyle = "rgba(255,255,255,0.92)";
@@ -658,14 +686,14 @@ async function renderMarketBoardPNG({
         const w = ctx.measureText(t).width;
         ctx.fillText(t, xRight - w, y);
       }
-      drawRight(priceTxt, colX.price + 110);
-      drawRight(dTxt, colX.delta + 90);
-      drawRight(avgTxt, colX.avg + 110);
+      drawRight(priceTxt, colX.price + Math.round(130 * s));
+      drawRight(dTxt, colX.delta + Math.round(110 * s));
+      drawRight(avgTxt, colX.avg + Math.round(130 * s));
 
       y += rowH;
     }
 
-    return y + 22;
+    return y + Math.round(28 * s);
   }
 
   // 取前幾名避免太長（你也可以改成 WORLD_LIST 全部顯示）
@@ -680,7 +708,7 @@ async function renderMarketBoardPNG({
     return rows.slice(0, limit);
   }
 
-  let y = panelY + 230;
+  let y = panelY + Math.round(280 * s);
   if (pricesNQ && pricesNQ.length) {
     y = drawTableSection("NQ 市場一覽（前 8 名）", topRows(pricesNQ, 8), bestNQ?.world, y);
   }
@@ -689,9 +717,9 @@ async function renderMarketBoardPNG({
   }
 
   // footer（盡量貼底）
-  ctx.font = "14px sans-serif";
+  ctx.font = `16px "NotoSansCJK", sans-serif`;
   ctx.fillStyle = "rgba(255,255,255,0.65)";
-  ctx.fillText("＊圖片看板模式：如果未顯示，請安裝 @napi-rs/canvas 或關閉 IMAGE_BOARD。", panelX + 24, panelY + panelH - 22);
+  ctx.fillText("＊圖片看板模式：如果未顯示，請安裝 @napi-rs/canvas 或關閉 IMAGE_BOARD。", panelX + 24, panelY + panelH - Math.round(26 * s));
 
   // 輸出 PNG
   return canvas.toBuffer("image/png");
