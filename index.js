@@ -731,6 +731,53 @@ async function buildBrowseCategories(keyword) {
 /* ===============================
    Discord Client
 ================================ */
+/* ===============================
+   安全送訊息（避免 reply reference 炸掉）
+   - 優先用 ctx.reply（Message）
+   - 其次用 Interaction 的 followUp/reply（如果傳進來的是 Interaction）
+   - 最後才用 channel.send
+   - 如需回覆指定訊息：用 reply.messageReference + failIfNotExists:false
+================================ */
+async function safeSend(ctx, payload, replyToMessageId = null) {
+  try {
+    // 1) Message: msg.reply
+    if (ctx && typeof ctx.reply === "function" && ctx.channel) {
+      // msg.reply 本身不需要 message_reference，最穩
+      return await ctx.reply(payload);
+    }
+
+    // 2) Interaction: followUp / reply
+    if (ctx && typeof ctx.isRepliable === "function" && ctx.isRepliable()) {
+      const p = { ...payload };
+      // 有指定要回覆某訊息就用 reply 物件，且 failIfNotExists:false 防炸
+      if (replyToMessageId) {
+        p.reply = { messageReference: String(replyToMessageId), failIfNotExists: false };
+      }
+      // 先 followUp（避免已回覆狀態不同造成錯誤）
+      if (typeof ctx.followUp === "function") {
+        return await ctx.followUp(p);
+      }
+      if (typeof ctx.reply === "function") {
+        return await ctx.reply(p);
+      }
+    }
+
+    // 3) Generic channel send
+    const ch = ctx?.channel || ctx;
+    if (ch && typeof ch.send === "function") {
+      const p = { ...payload };
+      if (replyToMessageId) {
+        // Discord API: 可能找不到原訊息，務必 failIfNotExists:false
+        p.reply = { messageReference: String(replyToMessageId), failIfNotExists: false };
+      }
+      return await ch.send(p);
+    }
+  } catch (err) {
+    console.error("safeSend failed:", err);
+  }
+  return null;
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -741,6 +788,12 @@ const client = new Client({
 
 client.once("ready", () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+});
+
+
+
+client.on("error", (err) => {
+  console.error("Discord client error:", err);
 });
 
 /* ===============================
@@ -1141,7 +1194,7 @@ async function sendPrice(msg, itemId, itemName) {
   const validHQ = pricesHQ.filter((p) => p.price !== null);
 
   if (!validNQ.length && !validHQ.length) {
-    await msg.reply("⚠️ 查不到價格資料");
+    await safeSend(msg, { content: "⚠️ 查不到價格資料" });
     return;
   }
 
@@ -1200,11 +1253,13 @@ async function sendPrice(msg, itemId, itemName) {
     .setTitle(`📦 ${itemName}`)
     .setDescription(lines.join(NL));
 
-  const reply = await msg.reply({ embeds: [embed] });
-  setTimeout(
-    () => reply.delete().catch(() => {}),
-    AUTO_DELETE_MINUTES * 60 * 1000
-  );
+  const sent = await safeSend(msg, { embeds: [embed] });
+  if (sent) {
+    setTimeout(
+      () => sent.delete().catch(() => {}),
+      AUTO_DELETE_MINUTES * 60 * 1000
+    );
+  }
 }
 
 /* ===============================
