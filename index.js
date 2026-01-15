@@ -105,6 +105,7 @@ const DEFAULT_TERM_MAP = {
   山雞蟾蜍: "山雞",
   卡札納爾: "卡扎纳尔",
   鯰魚精: "鲶鱼精",
+  達瑪斯卡垂褶上装: "达尔马斯卡垂褶上装", 
 };
 
 function loadTermMap() {
